@@ -307,6 +307,15 @@ class CanvasEditor(QGraphicsView):
         image.save(buf, "PNG")
         return bytes(buf.data())
 
+    def clear_annotations(self) -> None:
+        """Rimuove tutti gli item utente, lasciando solo il background."""
+        self._handles.detach()
+        for it in self.annotated_items():
+            if it.scene() is self._scene:
+                self._scene.removeItem(it)
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+
     def annotated_items(self) -> list[QGraphicsItem]:
         """Items utente (esclude background, flash, handle)."""
         out: list[QGraphicsItem] = []
@@ -381,6 +390,22 @@ class CanvasEditor(QGraphicsView):
         self._tool.on_release(self._scene, pos, modifiers=self._modifiers)
         self._drawing = False
         event.accept()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
+        # Doppio click su un callout → entra in editing del testo interno.
+        if event.button() == Qt.MouseButton.LeftButton:
+            pos = self.mapToScene(event.position().toPoint())
+            item = self._top_user_item_at(pos)
+            if item is not None and getattr(item, "IS_CALLOUT", False):
+                text_item = getattr(item, "_callout_text", None)
+                if text_item is not None and text_item.scene() is self._scene:
+                    text_item.setFocus(Qt.FocusReason.MouseFocusReason)
+                    cursor = text_item.textCursor()
+                    cursor.select(cursor.SelectionType.Document)
+                    text_item.setTextCursor(cursor)
+                    event.accept()
+                    return
+        super().mouseDoubleClickEvent(event)
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
         # Ctrl+ruota: zoom della vista. Notifica zoom_changed in % rispetto al fit.

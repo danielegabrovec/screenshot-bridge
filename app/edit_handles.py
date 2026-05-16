@@ -115,6 +115,10 @@ def _is_arrow(item: QGraphicsItem) -> bool:
     return getattr(item, "IS_ARROW", False) is True
 
 
+def _is_curve(item: QGraphicsItem) -> bool:
+    return getattr(item, "IS_CURVE", False) is True
+
+
 class EditHandleManager:
     """Maintains a set of edit handles around the currently selected item."""
 
@@ -159,18 +163,28 @@ class EditHandleManager:
             self._rot_line.setPen(pen)
         if self._target is not None:
             arrow = _is_arrow(self._target)
-            for h in self._handles:
+            curve = _is_curve(self._target)
+            for i, h in enumerate(self._handles):
                 if arrow:
                     h.restyle(
                         QColor(theme.handle_endpoint_fill),
                         QColor(theme.handle_endpoint_border),
                     )
-                else:
-                    # ultimo handle è rotate (fill diverso)
-                    if h is self._handles[-1] and len(self._handles) >= 5:
-                        h.restyle(QColor(theme.rotate_fill), QColor(theme.handle_border))
+                elif curve:
+                    # 0,1 = endpoint; 2 = control point (fill diverso)
+                    if i == 2:
+                        h.restyle(QColor(theme.rotate_fill),
+                                  QColor(theme.handle_border))
                     else:
-                        h.restyle(QColor(theme.handle_fill), QColor(theme.handle_border))
+                        h.restyle(QColor(theme.handle_endpoint_fill),
+                                  QColor(theme.handle_endpoint_border))
+                else:
+                    if h is self._handles[-1] and len(self._handles) >= 5:
+                        h.restyle(QColor(theme.rotate_fill),
+                                  QColor(theme.handle_border))
+                    else:
+                        h.restyle(QColor(theme.handle_fill),
+                                  QColor(theme.handle_border))
 
     def detach(self) -> None:
         """Remove all handles from the scene (e.g. on read-only or before export)."""
@@ -229,6 +243,8 @@ class EditHandleManager:
 
         if _is_arrow(item):
             self._build_arrow_handles(item)
+        elif _is_curve(item):
+            self._build_curve_handles(item)
         else:
             self._build_generic_handles(item)
         self._layout()
@@ -265,6 +281,58 @@ class EditHandleManager:
 
         self._handles.append(make_endpoint("start"))
         self._handles.append(make_endpoint("end"))
+        for h in self._handles:
+            self._add(h)
+
+    def _build_curve_handles(self, curve: QGraphicsItem) -> None:
+        """3 handle per le curve Bezier: start, end (endpoint) + control point.
+
+        Endpoint usano i colori "endpoint" (giallo/arancione) come le frecce.
+        Il control point è blu chiaro per distinguersi visivamente — l'utente
+        capisce subito che è quello che modella la curva.
+        """
+        theme = self._theme
+
+        def make_endpoint(which: str) -> _Handle:
+            def on_drag(scene_pos: QPointF) -> None:
+                target = self._target
+                if target is None or not _is_curve(target):
+                    return
+                local = target.mapFromScene(scene_pos)
+                start, end = target.endpoints()
+                if which == "start":
+                    target.set_endpoints(local, end)
+                else:
+                    target.set_endpoints(start, local)
+                self._layout()
+
+            return _Handle(
+                QColor(theme.handle_endpoint_fill),
+                QColor(theme.handle_endpoint_border),
+                on_drag=on_drag,
+                cursor=Qt.CursorShape.SizeAllCursor,
+            )
+
+        def make_control() -> _Handle:
+            def on_drag(scene_pos: QPointF) -> None:
+                target = self._target
+                if target is None or not _is_curve(target):
+                    return
+                local = target.mapFromScene(scene_pos)
+                target.set_control_point(local)
+                self._layout()
+
+            return _Handle(
+                QColor(theme.rotate_fill),  # azzurro chiaro: distingue dal endpoint
+                QColor(theme.handle_border),
+                on_drag=on_drag,
+                cursor=Qt.CursorShape.PointingHandCursor,
+                diameter=HANDLE_SIZE + 2,  # leggermente più grande, è "speciale"
+            )
+
+        self._handles.append(make_endpoint("start"))
+        self._handles.append(make_endpoint("end"))
+        self._handles.append(make_control())
         for h in self._handles:
             self._add(h)
 
@@ -385,6 +453,14 @@ class EditHandleManager:
             scene_end = item.mapToScene(end)
             self._handles[0].setPos(scene_start)
             self._handles[1].setPos(scene_end)
+            return
+
+        if _is_curve(item) and len(self._handles) == 3:
+            start, end = item.endpoints()
+            ctrl = item.control_point()
+            self._handles[0].setPos(item.mapToScene(start))
+            self._handles[1].setPos(item.mapToScene(end))
+            self._handles[2].setPos(item.mapToScene(ctrl))
             return
 
         # Generic: 4 corners + 1 rotation

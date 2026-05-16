@@ -94,13 +94,73 @@ class DashedLineTool(LineTool):
         self._dashed = True
 
 
-class CurveTool(BaseTool):
-    """Linea curva (Bezier quadratica).
+def _quadratic_path(start: QPointF, control: QPointF, end: QPointF) -> QPainterPath:
+    path = QPainterPath()
+    path.moveTo(start)
+    path.quadTo(control, end)
+    return path
 
-    Drag dal punto A al punto B; il control point è calcolato a metà del
-    segmento spostato perpendicolarmente di una frazione della lunghezza
-    (verso il lato dove l'utente trascina). Risultato: trascinando dritto
-    si ottiene una linea quasi retta, "piegando" durante il drag si curva.
+
+def _default_control(start: QPointF, end: QPointF) -> QPointF:
+    """Control point a metà segmento, spostato perpendicolarmente del 30%."""
+    dx = end.x() - start.x()
+    dy = end.y() - start.y()
+    length = math.hypot(dx, dy)
+    if length < 1:
+        nx, ny = 0.0, 0.0
+    else:
+        nx, ny = -dy / length, dx / length
+    bend = length * 0.30
+    return QPointF(
+        (start.x() + end.x()) / 2.0 + nx * bend,
+        (start.y() + end.y()) / 2.0 + ny * bend,
+    )
+
+
+class CurveItem(QGraphicsPathItem):
+    """Curva Bezier quadratica con endpoint e control point modificabili.
+
+    Mantiene start/control/end in coordinate item-local così l'EditHandle
+    manager può muovere ciascuno indipendentemente (analogo a ArrowItem).
+    Marker `IS_CURVE = True` per il riconoscimento nel manager.
+    """
+
+    IS_CURVE = True  # marker per EditHandleManager
+
+    def __init__(self, start: QPointF, end: QPointF) -> None:
+        ctrl = _default_control(start, end)
+        super().__init__(_quadratic_path(start, ctrl, end))
+        self._start = QPointF(start)
+        self._end = QPointF(end)
+        self._control = QPointF(ctrl)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+
+    def endpoints(self) -> tuple[QPointF, QPointF]:
+        return QPointF(self._start), QPointF(self._end)
+
+    def control_point(self) -> QPointF:
+        return QPointF(self._control)
+
+    def set_endpoints(self, start: QPointF, end: QPointF) -> None:
+        self.prepareGeometryChange()
+        self._start = QPointF(start)
+        self._end = QPointF(end)
+        self.setPath(_quadratic_path(self._start, self._control, self._end))
+
+    def set_control_point(self, control: QPointF) -> None:
+        self.prepareGeometryChange()
+        self._control = QPointF(control)
+        self.setPath(_quadratic_path(self._start, self._control, self._end))
+
+
+class CurveTool(BaseTool):
+    """Linea curva Bezier con control point handle modificabile.
+
+    Drag dal punto A al punto B; il control point è inizializzato a metà
+    del segmento, spostato perpendicolarmente del 30%. Dopo il rilascio
+    l'utente può selezionare la curva e trascinare la maniglia del
+    control point per modellarla.
     """
 
     name = "curve"
@@ -108,31 +168,10 @@ class CurveTool(BaseTool):
     def __init__(self) -> None:
         super().__init__()
         self._start: Optional[QPointF] = None
-        self._item: Optional[QGraphicsPathItem] = None
+        self._item: Optional[CurveItem] = None
 
     def cursor(self) -> QCursor:
         return QCursor(Qt.CursorShape.CrossCursor)
-
-    @staticmethod
-    def _curve_path(start: QPointF, end: QPointF) -> QPainterPath:
-        # Control point a metà del segmento, spostato perpendicolarmente
-        # di un offset proporzionale alla distanza tra start ed end.
-        dx = end.x() - start.x()
-        dy = end.y() - start.y()
-        length = math.hypot(dx, dy)
-        # Normale unitaria al segmento (ruotata di 90° CCW)
-        if length < 1:
-            nx, ny = 0.0, 0.0
-        else:
-            nx, ny = -dy / length, dx / length
-        # Magnitudine: 30% della lunghezza
-        bend = length * 0.30
-        mid_x = (start.x() + end.x()) / 2.0 + nx * bend
-        mid_y = (start.y() + end.y()) / 2.0 + ny * bend
-        path = QPainterPath()
-        path.moveTo(start)
-        path.quadTo(mid_x, mid_y, end.x(), end.y())
-        return path
 
     def on_press(
         self,
@@ -142,14 +181,12 @@ class CurveTool(BaseTool):
         modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier,
     ):
         self._start = QPointF(pos)
-        item = QGraphicsPathItem(self._curve_path(pos, pos))
+        item = CurveItem(pos, pos)
         pen = QPen(self.context.color, self.context.thickness)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         item.setPen(pen)
         item.setBrush(QBrush(Qt.GlobalColor.transparent))
-        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
-        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
         scene.addItem(item)
         self._item = item
         return item
@@ -163,7 +200,12 @@ class CurveTool(BaseTool):
     ) -> None:
         if self._start is None or self._item is None:
             return
-        self._item.setPath(self._curve_path(self._start, pos))
+        # Aggiorniamo endpoint+control automaticamente (control resta
+        # proporzionalmente "in mezzo, perpendicolare").
+        new_end = pos
+        new_ctrl = _default_control(self._start, new_end)
+        self._item.set_endpoints(self._start, new_end)
+        self._item.set_control_point(new_ctrl)
 
     def on_release(
         self,

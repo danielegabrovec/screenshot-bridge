@@ -7,7 +7,7 @@ from .blur_tool import RedactTool
 from .number_stamp_tool import NumberStampTool
 from .brace_tool import BraceTool
 from .callout_tool import CalloutTool
-from .line_tool import LineTool, DashedLineTool, CurveTool, DoubleArrowTool
+from .line_tool import LineTool, DashedLineTool, CurveTool, CurveItem, DoubleArrowTool
 from .marker_tool import CornerMarkerTool, CheckStampTool, CrossStampTool
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "LineTool",
     "DashedLineTool",
     "CurveTool",
+    "CurveItem",
     "DoubleArrowTool",
     "CornerMarkerTool",
     "CheckStampTool",

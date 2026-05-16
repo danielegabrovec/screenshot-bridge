@@ -335,8 +335,14 @@ class MainWindow(QMainWindow):
         self._tools_group.setExclusive(True)
 
         self._action_for_tool["select"] = self._add_tool_action(
-            tb_an, "Seleziona", "fa5s.mouse-pointer", "select", checked=True,
-            tooltip="Seleziona/sposta gli elementi sul canvas. Canc per eliminare.",
+            tb_an, "Sposta", "fa5s.mouse-pointer", "select", checked=True,
+            tooltip=(
+                "Sposta / seleziona gli elementi (nessun disegno).\n"
+                "• Click su un elemento → maniglie di resize/rotate\n"
+                "• Drag → sposta\n"
+                "• Doppio click su un callout → modifica testo\n"
+                "• Canc → elimina selezione"
+            ),
         )
         self._action_for_tool["arrow"] = self._add_tool_action(
             tb_an, "Freccia", "fa5s.long-arrow-alt-right", "arrow",
@@ -444,6 +450,12 @@ class MainWindow(QMainWindow):
             tooltip="Ripristina l'ultima annotazione annullata (Ctrl+Y)",
             callback=self.canvas.redo,
         )
+        self._add_action(
+            tb_an, "Pulisci", "fa5s.trash-alt",
+            tooltip="Rimuove TUTTE le annotazioni (frecce, stencil, testi…) "
+                    "mantenendo lo screenshot di base. Chiede conferma.",
+            callback=self._clear_annotations,
+        )
 
     # ---- Status bar ricca --------------------------------------------------
 
@@ -467,7 +479,7 @@ class MainWindow(QMainWindow):
     def _refresh_status_slots(self) -> None:
         tool_key = self.settings.last_tool()
         labels = {
-            "select": "Seleziona", "arrow": "Freccia",
+            "select": "Sposta", "arrow": "Freccia",
             "double_arrow": "Doppia freccia", "line": "Linea",
             "dashed_line": "Linea trattegg.", "curve": "Curva",
             "rect": "Rettangolo", "ellipse": "Cerchio", "text": "Testo",
@@ -955,6 +967,25 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Aggiunto stencil: {definition.label} ({where})", 3000
         )
+
+    def _clear_annotations(self) -> None:
+        """Rimuove tutte le annotazioni mantenendo lo screenshot di base."""
+        if not self.canvas.has_image():
+            self.statusBar().showMessage("Nessuna immagine: niente da pulire.", 2000)
+            return
+        count = len(self.canvas.annotated_items())
+        if count == 0:
+            self.statusBar().showMessage("Niente da pulire: nessuna annotazione.", 2000)
+            return
+        confirm = QMessageBox.question(
+            self,
+            "Pulisci annotazioni",
+            f"Rimuovere tutte le {count} annotazioni mantenendo lo screenshot?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        self.canvas.clear_annotations()
+        self.statusBar().showMessage(f"{count} annotazioni rimosse.", 3000)
 
     def _delete_task(self, task: Task) -> None:
         confirm = QMessageBox.question(

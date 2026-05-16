@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QGraphicsItem,
@@ -101,9 +101,16 @@ class CalloutTool(BaseTool):
         text_item.setFont(font)
         text_item.setDefaultTextColor(self.context.color)
         text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsFocusable, True)
+        text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         text_item.setTextInteractionFlags(Qt.TextInteractionFlag.TextEditorInteraction)
+        # Default text width per forzare word-wrap dentro al body.
+        text_item.setTextWidth(max(60, self._body_start.x() - self._tip.x() - 20))
         text_item.setPos(body_rect.left() + 10, body_rect.top() + 6)
         group.addToGroup(text_item)
+        # Marker per identificare i callout fuori dal tool (es. nel canvas
+        # per dare focus al text item quando si seleziona il group).
+        group.IS_CALLOUT = True  # type: ignore[attr-defined]
+        group._callout_text = text_item  # type: ignore[attr-defined]
 
         scene.addItem(group)
         self._group = group
@@ -139,12 +146,22 @@ class CalloutTool(BaseTool):
         modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier,
     ):
         group = self._group
-        # Entra subito in editing del testo e seleziona "Scrivi qui…"
-        if self._text_item is not None:
-            self._text_item.setFocus()
-            cursor = self._text_item.textCursor()
-            cursor.select(cursor.SelectionType.Document)
-            self._text_item.setTextCursor(cursor)
+        text_item = self._text_item  # capture prima del clear
+        # Entra subito in editing del testo e seleziona "Scrivi qui…".
+        # Posticipiamo al prossimo tick con singleShot(0): se chiamiamo
+        # setFocus() ora, Qt riassegna il focus al group come "ultimo item
+        # cliccato" appena finisce il mouseReleaseEvent. Con il timer il
+        # focus arriva DOPO che il release è stato processato.
+        if text_item is not None:
+            def _grab_focus() -> None:
+                # Item potrebbe essere stato rimosso nel frattempo
+                if text_item.scene() is None:
+                    return
+                text_item.setFocus(Qt.FocusReason.MouseFocusReason)
+                cursor = text_item.textCursor()
+                cursor.select(cursor.SelectionType.Document)
+                text_item.setTextCursor(cursor)
+            QTimer.singleShot(0, _grab_focus)
         self._group = None
         self._path_item = None
         self._text_item = None
