@@ -903,6 +903,12 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Salvato: {task.png_path.name}", 5000)
 
     def _copy_last_path(self) -> None:
+        # Se l'utente ha selezionato/spuntato N task nel pannello a destra,
+        # il pulsante in toolbar deve agire su QUELLI, non sull'ultimo salvato.
+        selected = self.task_panel.selected_tasks_active_tab()
+        if selected:
+            self._copy_multi_paths(selected)
+            return
         task = self._resolve_handoff_task()
         if task is None:
             return
@@ -912,6 +918,11 @@ class MainWindow(QMainWindow):
         self._toast_copied(text)
 
     def _copy_last_for_claude(self) -> None:
+        # Idem: se ci sono task selezionati, formato multi.
+        selected = self.task_panel.selected_tasks_active_tab()
+        if selected:
+            self._copy_multi_for_claude(selected)
+            return
         task = self._resolve_handoff_task()
         if task is None:
             return
@@ -919,7 +930,6 @@ class MainWindow(QMainWindow):
         try:
             text = storage.claude_handoff_text(task, template)
         except (KeyError, ValueError, IndexError) as exc:
-            # Template malformato (placeholder sconosciuto, graffa orfana).
             QMessageBox.warning(
                 self, "Template non valido",
                 f"Il template handoff contiene un errore:\n  {exc}\n\n"

@@ -312,3 +312,10 @@ class TaskPanel(QWidget):
         self.done_list.populate(storage.list_done())
         self.tabs.setTabText(0, f"Da fare ({self.pending_list.count()})")
         self.tabs.setTabText(1, f"Completati ({self.done_list.count()})")
+
+    def selected_tasks_active_tab(self) -> list[Task]:
+        """Selezione (selectedItems + checkbox checked) nel tab attivo."""
+        current = self.tabs.currentWidget()
+        if isinstance(current, _TaskList):
+            return current.selected_tasks()
+        return []
