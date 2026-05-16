@@ -41,9 +41,18 @@ from .task_panel import TaskPanel
 from .theme import Theme, ThemeManager, icon, repolish
 from .tools import (
     ArrowTool,
+    BraceTool,
+    CalloutTool,
+    CheckStampTool,
+    CornerMarkerTool,
+    CrossStampTool,
+    CurveTool,
+    DashedLineTool,
+    DoubleArrowTool,
     EllipseTool,
     HighlightRectTool,
     HighlighterTool,
+    LineTool,
     NumberStampTool,
     PenTool,
     RectTool,
@@ -109,14 +118,23 @@ class MainWindow(QMainWindow):
         self._tools_map = {
             "select": None,
             "arrow": ArrowTool(),
+            "double_arrow": DoubleArrowTool(),
+            "line": LineTool(),
+            "dashed_line": DashedLineTool(),
+            "curve": CurveTool(),
             "rect": RectTool(),
             "ellipse": EllipseTool(),
             "text": TextTool(),
+            "callout": CalloutTool(),
+            "brace": BraceTool(),
+            "corner_marker": CornerMarkerTool(),
             "pen": PenTool(),
             "highlighter": HighlighterTool(),
             "highlight_rect": HighlightRectTool(),
             "redact": RedactTool(),
             "number_stamp": NumberStampTool(),
+            "check_stamp": CheckStampTool(),
+            "cross_stamp": CrossStampTool(),
         }
         self._action_for_tool: dict[str, QAction] = {}
         self._themed_actions: list[tuple[QAction, str]] = []  # (action, qtawesome name)
@@ -324,6 +342,22 @@ class MainWindow(QMainWindow):
             tb_an, "Freccia", "fa5s.long-arrow-alt-right", "arrow",
             tooltip="Disegna una freccia. Shift = snap a 45°.",
         )
+        self._action_for_tool["double_arrow"] = self._add_tool_action(
+            tb_an, "Doppia freccia", "fa5s.arrows-alt-h", "double_arrow",
+            tooltip="Freccia bidirezionale ↔ (scambi, misure, simmetrie). Shift = snap 45°.",
+        )
+        self._action_for_tool["line"] = self._add_tool_action(
+            tb_an, "Linea", "fa5s.minus", "line",
+            tooltip="Linea retta semplice. Shift = snap a 45°.",
+        )
+        self._action_for_tool["dashed_line"] = self._add_tool_action(
+            tb_an, "Linea trattegg.", "fa5s.grip-lines", "dashed_line",
+            tooltip="Linea tratteggiata. Utile per divisioni o assi virtuali.",
+        )
+        self._action_for_tool["curve"] = self._add_tool_action(
+            tb_an, "Curva", "mdi.vector-curve", "curve",
+            tooltip="Linea curva (Bezier). Trascina dritto = quasi retta, piega = curva.",
+        )
         self._action_for_tool["rect"] = self._add_tool_action(
             tb_an, "Rettangolo", "far.square", "rect",
             tooltip="Disegna un rettangolo. Shift = quadrato. Alt = dal centro.",
@@ -335,6 +369,18 @@ class MainWindow(QMainWindow):
         self._action_for_tool["text"] = self._add_tool_action(
             tb_an, "Testo", "fa5s.font", "text",
             tooltip="Inserisce una nota di testo. Click sul canvas per piazzarla.",
+        )
+        self._action_for_tool["callout"] = self._add_tool_action(
+            tb_an, "Callout", "fa5s.comment-dots", "callout",
+            tooltip="Banner di commento con punta verso un punto. Drag dalla punta al body.",
+        )
+        self._action_for_tool["brace"] = self._add_tool_action(
+            tb_an, "Graffa", "mdi.code-braces", "brace",
+            tooltip="Parentesi graffa { } per raggruppare un'area. Drag verticale o orizzontale.",
+        )
+        self._action_for_tool["corner_marker"] = self._add_tool_action(
+            tb_an, "Angoli", "fa5s.expand", "corner_marker",
+            tooltip="4 angoli a 'L' per evidenziare un'area SENZA coprirla.",
         )
         self._action_for_tool["pen"] = self._add_tool_action(
             tb_an, "Penna", "fa5s.pen", "pen",
@@ -355,6 +401,14 @@ class MainWindow(QMainWindow):
         self._action_for_tool["number_stamp"] = self._add_tool_action(
             tb_an, "Numero", "fa5s.list-ol", "number_stamp",
             tooltip="Stampa cerchi numerati 1, 2, 3… ad ogni click (Esc resetta)",
+        )
+        self._action_for_tool["check_stamp"] = self._add_tool_action(
+            tb_an, "OK", "fa5s.check-circle", "check_stamp",
+            tooltip="Stampa ✓ verde ad ogni click (va bene così, conferma).",
+        )
+        self._action_for_tool["cross_stamp"] = self._add_tool_action(
+            tb_an, "NO", "fa5s.times-circle", "cross_stamp",
+            tooltip="Stampa ✗ rossa ad ogni click (togli questo, sbagliato).",
         )
 
         tb_an.addSeparator()
@@ -413,10 +467,15 @@ class MainWindow(QMainWindow):
     def _refresh_status_slots(self) -> None:
         tool_key = self.settings.last_tool()
         labels = {
-            "select": "Seleziona", "arrow": "Freccia", "rect": "Rettangolo",
-            "ellipse": "Cerchio", "text": "Testo", "pen": "Penna",
+            "select": "Seleziona", "arrow": "Freccia",
+            "double_arrow": "Doppia freccia", "line": "Linea",
+            "dashed_line": "Linea trattegg.", "curve": "Curva",
+            "rect": "Rettangolo", "ellipse": "Cerchio", "text": "Testo",
+            "callout": "Callout", "brace": "Graffa",
+            "corner_marker": "Angoli", "pen": "Penna",
             "highlighter": "Evidenziatore", "highlight_rect": "Evid. rect",
             "redact": "Redact", "number_stamp": "Numero",
+            "check_stamp": "OK ✓", "cross_stamp": "NO ✗",
         }
         self._sb_tool.setText(f"Strumento: {labels.get(tool_key, tool_key)}")
         self._sb_color.setText(f"● {self._current_color.name()}")

@@ -5,6 +5,10 @@ from .text_tool import TextTool
 from .pen_tool import PenTool, HighlighterTool
 from .blur_tool import RedactTool
 from .number_stamp_tool import NumberStampTool
+from .brace_tool import BraceTool
+from .callout_tool import CalloutTool
+from .line_tool import LineTool, DashedLineTool, CurveTool, DoubleArrowTool
+from .marker_tool import CornerMarkerTool, CheckStampTool, CrossStampTool
 
 __all__ = [
     "BaseTool",
@@ -19,4 +23,13 @@ __all__ = [
     "HighlighterTool",
     "RedactTool",
     "NumberStampTool",
+    "BraceTool",
+    "CalloutTool",
+    "LineTool",
+    "DashedLineTool",
+    "CurveTool",
+    "DoubleArrowTool",
+    "CornerMarkerTool",
+    "CheckStampTool",
+    "CrossStampTool",
 ]
