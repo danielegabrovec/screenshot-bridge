@@ -731,6 +731,188 @@ def toast_notification(text: str = "Operazione completata") -> QGraphicsItemGrou
 
 
 # ---------------------------------------------------------------------------
+# Stencils aggiuntivi (2026-05-16 #2)
+# ---------------------------------------------------------------------------
+
+
+def search_bar(placeholder: str = "Cerca...") -> QGraphicsItemGroup:
+    """Search bar con icona lente + placeholder."""
+    group = _make_group()
+    rect = QRectF(0, 0, 260, 36)
+    path = QPainterPath()
+    path.addRoundedRect(rect, 18, 18)
+    body = QGraphicsPathItem(path)
+    body.setPen(_pen(OUTLINE))
+    body.setBrush(QBrush(FILL))
+    group.addToGroup(body)
+    # lente: cerchio + manico
+    lens = QGraphicsEllipseItem(QRectF(12, 10, 14, 14))
+    lens.setPen(_pen(MUTED, 1.5))
+    lens.setBrush(QBrush(Qt.GlobalColor.transparent))
+    group.addToGroup(lens)
+    handle = QGraphicsLineItem(23, 21, 28, 26)
+    handle.setPen(_pen(MUTED, 1.5))
+    group.addToGroup(handle)
+    lbl = _text(placeholder, _font(10), MUTED)
+    lbl.setPos(36, (36 - lbl.boundingRect().height()) / 2)
+    group.addToGroup(lbl)
+    return group
+
+
+def alert_box(text: str = "Errore: impossibile salvare.") -> QGraphicsItemGroup:
+    """Alert box danger con icona !"""
+    group = _make_group()
+    rect = QRectF(0, 0, 320, 56)
+    path = QPainterPath()
+    path.addRoundedRect(rect, 6, 6)
+    body = QGraphicsPathItem(path)
+    body.setPen(_pen(QColor("#ef4444"), 1))
+    body.setBrush(QBrush(QColor("#fef2f2")))
+    group.addToGroup(body)
+    icon_circle = QGraphicsEllipseItem(QRectF(14, 16, 24, 24))
+    icon_circle.setPen(_pen(QColor("#ef4444"), 0))
+    icon_circle.setBrush(QBrush(QColor("#ef4444")))
+    group.addToGroup(icon_circle)
+    bang = _text("!", _font(13, bold=True), QColor("#ffffff"))
+    bb = bang.boundingRect()
+    bang.setPos(26 - bb.width() / 2, 28 - bb.height() / 2)
+    group.addToGroup(bang)
+    msg = _text(text, _font(11, bold=True), QColor("#991b1b"))
+    msg.setPos(50, (56 - msg.boundingRect().height()) / 2)
+    group.addToGroup(msg)
+    return group
+
+
+def sidebar_nav() -> QGraphicsItemGroup:
+    """Sidebar verticale con 4 voci, una attiva."""
+    group = _make_group()
+    rect = QRectF(0, 0, 180, 220)
+    body = QGraphicsRectItem(rect)
+    body.setPen(_pen(OUTLINE))
+    body.setBrush(QBrush(DASH_FILL))
+    group.addToGroup(body)
+    items = ["Dashboard", "Progetti", "Impostazioni", "Esci"]
+    active_idx = 1
+    for i, label_text in enumerate(items):
+        y = 14 + i * 44
+        if i == active_idx:
+            bg_path = QPainterPath()
+            bg_path.addRoundedRect(QRectF(8, y, 164, 32), 4, 4)
+            bg = QGraphicsPathItem(bg_path)
+            bg.setPen(_pen(ACCENT, 0))
+            bg.setBrush(QBrush(ACCENT))
+            group.addToGroup(bg)
+        # dot icona
+        dot = QGraphicsEllipseItem(QRectF(18, y + 11, 10, 10))
+        col = QColor("#ffffff") if i == active_idx else MUTED
+        dot.setPen(_pen(col, 0))
+        dot.setBrush(QBrush(col))
+        group.addToGroup(dot)
+        t = _text(label_text, _font(11, bold=(i == active_idx)),
+                  QColor("#ffffff") if i == active_idx else OUTLINE)
+        t.setPos(38, y + 7)
+        group.addToGroup(t)
+    return group
+
+
+def pagination(current: int = 3, total: int = 8) -> QGraphicsItemGroup:
+    """Pagination 1 2 3 … 8 con pagina corrente evidenziata."""
+    group = _make_group()
+    cell = 30.0
+    pages = [1, 2, 3, None, total]  # None = ellipsis
+    x = 0.0
+    for p in pages:
+        if p is None:
+            t = _text("…", _font(11), MUTED)
+            t.setPos(x + 8, 6)
+            group.addToGroup(t)
+            x += cell
+            continue
+        is_curr = p == current
+        cell_rect = QRectF(x, 0, cell, cell)
+        path = QPainterPath()
+        path.addRoundedRect(cell_rect, 4, 4)
+        body = QGraphicsPathItem(path)
+        if is_curr:
+            body.setPen(_pen(ACCENT, 0))
+            body.setBrush(QBrush(ACCENT))
+        else:
+            body.setPen(_pen(OUTLINE))
+            body.setBrush(QBrush(FILL))
+        group.addToGroup(body)
+        t = _text(str(p), _font(10, bold=is_curr),
+                  QColor("#ffffff") if is_curr else OUTLINE)
+        _center_text(t, cell_rect)
+        group.addToGroup(t)
+        x += cell + 4
+    return group
+
+
+def login_form() -> QGraphicsItemGroup:
+    """Form login con titolo, email, password, bottone."""
+    group = _make_group()
+    rect = QRectF(0, 0, 300, 240)
+    path = QPainterPath()
+    path.addRoundedRect(rect, 8, 8)
+    body = QGraphicsPathItem(path)
+    body.setPen(_pen(OUTLINE))
+    body.setBrush(QBrush(FILL))
+    group.addToGroup(body)
+    title = _text("Accedi", _font(15, bold=True), OUTLINE)
+    title.setPos(20, 18)
+    group.addToGroup(title)
+    # email
+    lbl_e = _text("Email", _font(9, bold=True), MUTED)
+    lbl_e.setPos(20, 58)
+    group.addToGroup(lbl_e)
+    input_e = text_input("nome@esempio.com")
+    input_e.setPos(20, 76)
+    group.addToGroup(input_e)
+    # password
+    lbl_p = _text("Password", _font(9, bold=True), MUTED)
+    lbl_p.setPos(20, 122)
+    group.addToGroup(lbl_p)
+    input_p = text_input("••••••••")
+    input_p.setPos(20, 140)
+    group.addToGroup(input_p)
+    # button
+    btn = button_primary("Accedi")
+    btn.setPos(20, 188)
+    group.addToGroup(btn)
+    # link
+    link = _text("Hai dimenticato la password?", _font(9), ACCENT)
+    link.setPos(170, 200)
+    group.addToGroup(link)
+    return group
+
+
+def code_block(text: str = "const x = 42;\nconsole.log(x);") -> QGraphicsItemGroup:
+    """Blocco di codice monospace con sfondo scuro."""
+    group = _make_group()
+    rect = QRectF(0, 0, 320, 90)
+    path = QPainterPath()
+    path.addRoundedRect(rect, 6, 6)
+    body = QGraphicsPathItem(path)
+    body.setPen(_pen(QColor("#0f172a"), 0))
+    body.setBrush(QBrush(QColor("#0f172a")))
+    group.addToGroup(body)
+    # 3 dot mac-style
+    for i, c in enumerate(("#ef4444", "#f59e0b", "#22c55e")):
+        d = QGraphicsEllipseItem(QRectF(10 + i * 14, 10, 8, 8))
+        d.setPen(_pen(QColor(c), 0))
+        d.setBrush(QBrush(QColor(c)))
+        group.addToGroup(d)
+    font_mono = QFont("Consolas")
+    font_mono.setPointSize(10)
+    code = QGraphicsSimpleTextItem(text)
+    code.setFont(font_mono)
+    code.setBrush(QBrush(QColor("#e5e7eb")))
+    code.setPos(14, 32)
+    group.addToGroup(code)
+    return group
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -741,40 +923,84 @@ class StencilDef:
     label: str
     category: str
     factory: Callable[[], QGraphicsItemGroup]
+    # Alias di ricerca: parole chiave che dovrebbero matchare lo stencil
+    # anche se non compaiono nella label (es. "button" → Pulsante primario).
+    keywords: tuple[str, ...] = ()
 
 
 CATALOG: tuple[StencilDef, ...] = (
-    StencilDef("button_primary", "Pulsante primario", "Controlli", lambda: button_primary()),
-    StencilDef("button_secondary", "Pulsante secondario", "Controlli", lambda: button_secondary()),
-    StencilDef("text_input", "Campo testo", "Form", lambda: text_input()),
-    StencilDef("textarea", "Area di testo", "Form", lambda: textarea()),
-    StencilDef("dropdown", "Menu a tendina", "Form", lambda: dropdown()),
-    StencilDef("checkbox", "Checkbox", "Form", lambda: checkbox(checked=True)),
-    StencilDef("radio", "Radio button", "Form", lambda: radio(selected=True)),
-    StencilDef("toggle", "Toggle / switch", "Form", lambda: toggle_switch(on=True)),
-    StencilDef("label", "Etichetta", "Testi", lambda: label()),
-    StencilDef("heading", "Titolo", "Testi", lambda: heading()),
-    StencilDef("navbar", "Barra di navigazione", "Layout", lambda: navbar()),
-    StencilDef("tabs", "Tab", "Layout", lambda: tab_bar()),
-    StencilDef("card", "Card", "Layout", lambda: card()),
-    StencilDef("section", "Sezione/Pannello", "Layout", lambda: section_panel()),
-    StencilDef("list_row", "Riga lista", "Contenuti", lambda: list_row()),
-    StencilDef("image", "Immagine (placeholder)", "Contenuti", lambda: image_placeholder()),
-    StencilDef("icon", "Icona", "Contenuti", lambda: icon_placeholder()),
-    StencilDef("modal", "Modale / Dialog", "Layout", lambda: modal_dialog()),
-    # --- estensione (sessione 2026-05-16) ---
-    StencilDef("badge", "Badge / Pill", "Controlli", lambda: badge()),
-    StencilDef("progress_bar", "Barra di progresso", "Form", lambda: progress_bar()),
-    StencilDef("slider", "Slider", "Form", lambda: slider()),
-    StencilDef("file_upload", "Upload file", "Form", lambda: file_upload()),
-    StencilDef("calendar_picker", "Date picker", "Form", lambda: calendar_picker()),
-    StencilDef("breadcrumb", "Breadcrumb", "Layout", lambda: breadcrumb()),
-    StencilDef("stepper", "Stepper / Wizard", "Layout", lambda: stepper()),
-    StencilDef("data_table", "Tabella dati", "Contenuti", lambda: data_table()),
-    StencilDef("chart_bar", "Grafico a barre", "Contenuti", lambda: chart_bar()),
-    StencilDef("chart_line", "Grafico a linea", "Contenuti", lambda: chart_line()),
-    StencilDef("tooltip", "Tooltip", "Contenuti", lambda: tooltip()),
-    StencilDef("toast", "Toast notification", "Contenuti", lambda: toast_notification()),
+    StencilDef("button_primary", "Pulsante primario", "Controlli", lambda: button_primary(),
+               keywords=("button", "btn", "primary", "cta", "submit", "azione")),
+    StencilDef("button_secondary", "Pulsante secondario", "Controlli", lambda: button_secondary(),
+               keywords=("button", "btn", "secondary", "outline", "ghost")),
+    StencilDef("badge", "Badge / Pill", "Controlli", lambda: badge(),
+               keywords=("badge", "pill", "tag", "chip", "label", "new")),
+    StencilDef("text_input", "Campo testo", "Form", lambda: text_input(),
+               keywords=("input", "field", "campo", "text", "form")),
+    StencilDef("textarea", "Area di testo", "Form", lambda: textarea(),
+               keywords=("textarea", "area", "multilinea", "commento", "note")),
+    StencilDef("dropdown", "Menu a tendina", "Form", lambda: dropdown(),
+               keywords=("dropdown", "select", "combobox", "menu", "tendina")),
+    StencilDef("checkbox", "Checkbox", "Form", lambda: checkbox(checked=True),
+               keywords=("checkbox", "check", "opzione", "spunta")),
+    StencilDef("radio", "Radio button", "Form", lambda: radio(selected=True),
+               keywords=("radio", "option", "scelta", "opzione")),
+    StencilDef("toggle", "Toggle / switch", "Form", lambda: toggle_switch(on=True),
+               keywords=("toggle", "switch", "on", "off", "interruttore")),
+    StencilDef("progress_bar", "Barra di progresso", "Form", lambda: progress_bar(),
+               keywords=("progress", "loading", "barra", "percentuale", "caricamento")),
+    StencilDef("slider", "Slider", "Form", lambda: slider(),
+               keywords=("slider", "range", "volume", "trackbar")),
+    StencilDef("file_upload", "Upload file", "Form", lambda: file_upload(),
+               keywords=("upload", "file", "drop", "dropzone", "carica", "allegato")),
+    StencilDef("calendar_picker", "Date picker", "Form", lambda: calendar_picker(),
+               keywords=("calendar", "date", "picker", "data", "calendario", "giorno")),
+    StencilDef("search_bar", "Barra di ricerca", "Form", lambda: search_bar(),
+               keywords=("search", "ricerca", "find", "filtro", "cerca", "lente")),
+    StencilDef("label", "Etichetta", "Testi", lambda: label(),
+               keywords=("label", "etichetta", "testo")),
+    StencilDef("heading", "Titolo", "Testi", lambda: heading(),
+               keywords=("heading", "title", "titolo", "h1", "h2", "intestazione")),
+    StencilDef("code_block", "Blocco di codice", "Testi", lambda: code_block(),
+               keywords=("code", "snippet", "codice", "block", "terminal", "console", "mono")),
+    StencilDef("navbar", "Barra di navigazione", "Layout", lambda: navbar(),
+               keywords=("navbar", "nav", "header", "menu", "top", "barra")),
+    StencilDef("sidebar_nav", "Sidebar (menu laterale)", "Layout", lambda: sidebar_nav(),
+               keywords=("sidebar", "side", "menu", "drawer", "laterale", "nav")),
+    StencilDef("tabs", "Tab", "Layout", lambda: tab_bar(),
+               keywords=("tabs", "tab", "schede", "linguette")),
+    StencilDef("breadcrumb", "Breadcrumb", "Layout", lambda: breadcrumb(),
+               keywords=("breadcrumb", "path", "percorso", "navigation")),
+    StencilDef("stepper", "Stepper / Wizard", "Layout", lambda: stepper(),
+               keywords=("stepper", "wizard", "step", "passi", "progressivo")),
+    StencilDef("card", "Card", "Layout", lambda: card(),
+               keywords=("card", "tile", "box", "scheda", "contenitore")),
+    StencilDef("section", "Sezione/Pannello", "Layout", lambda: section_panel(),
+               keywords=("section", "panel", "pannello", "sezione", "container")),
+    StencilDef("modal", "Modale / Dialog", "Layout", lambda: modal_dialog(),
+               keywords=("modal", "dialog", "popup", "finestra", "conferma")),
+    StencilDef("login_form", "Form di login", "Layout", lambda: login_form(),
+               keywords=("login", "accedi", "auth", "signin", "password", "form")),
+    StencilDef("pagination", "Paginazione", "Layout", lambda: pagination(),
+               keywords=("pagination", "pagine", "next", "prev", "paginator")),
+    StencilDef("list_row", "Riga lista", "Contenuti", lambda: list_row(),
+               keywords=("list", "row", "riga", "elenco", "item", "lista")),
+    StencilDef("image", "Immagine (placeholder)", "Contenuti", lambda: image_placeholder(),
+               keywords=("image", "img", "picture", "foto", "immagine", "placeholder")),
+    StencilDef("icon", "Icona", "Contenuti", lambda: icon_placeholder(),
+               keywords=("icon", "icona", "symbol", "star")),
+    StencilDef("data_table", "Tabella dati", "Contenuti", lambda: data_table(),
+               keywords=("table", "grid", "tabella", "dati", "rows", "righe", "colonne")),
+    StencilDef("chart_bar", "Grafico a barre", "Contenuti", lambda: chart_bar(),
+               keywords=("chart", "bar", "grafico", "barre", "istogramma", "statistica")),
+    StencilDef("chart_line", "Grafico a linea", "Contenuti", lambda: chart_line(),
+               keywords=("chart", "line", "grafico", "linea", "trend", "andamento")),
+    StencilDef("tooltip", "Tooltip", "Contenuti", lambda: tooltip(),
+               keywords=("tooltip", "popover", "hint", "suggerimento", "bolla")),
+    StencilDef("toast", "Toast notification", "Contenuti", lambda: toast_notification(),
+               keywords=("toast", "notification", "notifica", "alert", "snackbar")),
+    StencilDef("alert_box", "Alert / Errore", "Contenuti", lambda: alert_box(),
+               keywords=("alert", "error", "warning", "errore", "avviso", "allerta")),
 )
 
 
@@ -791,3 +1017,23 @@ def categories() -> list[str]:
         if s.category not in seen:
             seen.append(s.category)
     return seen
+
+
+def search(needle: str, category: str = "") -> list[StencilDef]:
+    """Filtra il catalogo per label/keywords + (opz.) categoria.
+
+    `needle` viene normalizzato (lowercase, strip). Match permissivo:
+    matcha se appare nella label, nel key, o in una keyword.
+    """
+    n = needle.strip().lower()
+    out: list[StencilDef] = []
+    for s in CATALOG:
+        if category and s.category != category:
+            continue
+        if not n:
+            out.append(s)
+            continue
+        hay = " ".join((s.label.lower(), s.key.lower(), *s.keywords))
+        if n in hay:
+            out.append(s)
+    return out

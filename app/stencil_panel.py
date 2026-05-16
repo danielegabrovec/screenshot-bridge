@@ -7,7 +7,9 @@ from PyQt6.QtCore import QMimeData, QRectF, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QDrag, QIcon, QImage, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractItemView,
+    QComboBox,
     QGraphicsScene,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -21,6 +23,7 @@ from .stencils import StencilDef
 
 
 ROLE_KEY = Qt.ItemDataRole.UserRole + 1
+ROLE_IS_HEADER = Qt.ItemDataRole.UserRole + 2
 STENCIL_MIME = "application/x-screenshotbridge-stencil"
 
 
@@ -50,7 +53,6 @@ class _DraggableStencilList(QListWidget):
         self.setDragEnabled(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
         self.setMouseTracking(True)
-        self._hover_row = -1
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
         item = self.itemAt(event.position().toPoint())
@@ -91,8 +93,9 @@ class _DraggableStencilList(QListWidget):
 
 
 class StencilPanel(QWidget):
-    """Lista degli stencil disponibili. Emette `stencil_chosen(key)` al click,
-    oppure permette di trascinare l'elemento direttamente sul canvas."""
+    """Lista degli stencil con ricerca smart (label + keywords + key) e
+    filtro per categoria. Emette `stencil_chosen(key)` al click, oppure
+    permette di trascinare l'elemento sul canvas."""
 
     stencil_chosen = pyqtSignal(str)
 
@@ -103,9 +106,16 @@ class StencilPanel(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(6)
 
+        # Titolo + contatore (aggiornato al volo)
+        title_row = QHBoxLayout()
         title = QLabel("Stencil UI", self)
         title.setStyleSheet("QLabel { font-weight: bold; font-size: 12pt; }")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        self._counter = QLabel(self)
+        self._counter.setStyleSheet("QLabel { color:#6b7280; font-size: 9pt; }")
+        title_row.addWidget(self._counter)
+        layout.addLayout(title_row)
 
         hint = QLabel(
             "<b>Trascina</b> uno stencil sul canvas per posizionarlo dove vuoi, "
@@ -117,9 +127,20 @@ class StencilPanel(QWidget):
         hint.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(hint)
 
+        # Filtri: categoria + ricerca
+        filter_row = QHBoxLayout()
+        self._category_combo = QComboBox(self)
+        self._category_combo.addItem("Tutte le categorie", "")
+        for cat in stencils.categories():
+            self._category_combo.addItem(cat, cat)
+        self._category_combo.currentIndexChanged.connect(self._apply_filter)
+        filter_row.addWidget(self._category_combo, stretch=1)
+        layout.addLayout(filter_row)
+
         self._search = QLineEdit(self)
-        self._search.setPlaceholderText("Cerca stencil...")
-        self._search.textChanged.connect(self._filter)
+        self._search.setPlaceholderText("Cerca per nome o parola chiave…")
+        self._search.setClearButtonEnabled(True)
+        self._search.textChanged.connect(self._apply_filter)
         layout.addWidget(self._search)
 
         self._list = _DraggableStencilList(self)
@@ -128,14 +149,30 @@ class StencilPanel(QWidget):
         self._list.setUniformItemSizes(False)
         self._list.itemClicked.connect(self._on_item_clicked)
         self._list.itemActivated.connect(self._on_item_clicked)
-        layout.addWidget(self._list)
+        layout.addWidget(self._list, stretch=1)
 
-        self._populate()
+        # Cache thumbnail per non rigenerare ad ogni filter.
+        self._thumb_cache: dict[str, QPixmap] = {}
 
-    def _populate(self) -> None:
+        self._apply_filter()
+
+    # ---- Populating + filtering -------------------------------------------
+
+    def _thumbnail_for(self, definition: StencilDef) -> QPixmap:
+        if definition.key not in self._thumb_cache:
+            self._thumb_cache[definition.key] = _render_thumbnail(definition)
+        return self._thumb_cache[definition.key]
+
+    def _apply_filter(self) -> None:
+        needle = self._search.text()
+        category = self._category_combo.currentData() or ""
+        results = stencils.search(needle, category=category)
+
+        self._list.clear()
         current_category: Optional[str] = None
-        for definition in stencils.CATALOG:
-            if definition.category != current_category:
+        for definition in results:
+            # Header di categoria solo se mostriamo "Tutte le categorie".
+            if not category and definition.category != current_category:
                 current_category = definition.category
                 header = QListWidgetItem(f"— {current_category} —")
                 header.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -143,24 +180,25 @@ class StencilPanel(QWidget):
                 font.setBold(True)
                 header.setFont(font)
                 header.setForeground(QColor("#6b7280"))
+                header.setData(ROLE_IS_HEADER, True)
                 self._list.addItem(header)
 
             item = QListWidgetItem(definition.label)
             item.setData(ROLE_KEY, definition.key)
-            item.setIcon(QIcon(_render_thumbnail(definition)))
+            item.setIcon(QIcon(self._thumbnail_for(definition)))
             item.setSizeHint(QSize(0, 100))
+            # Tooltip ricco mostra le keywords (così l'utente capisce perché
+            # uno stencil è apparso/non apparso in ricerca).
+            tip_parts = [f"<b>{definition.label}</b>"]
+            if definition.keywords:
+                tip_parts.append(
+                    f"<span style='color:#6b7280'>alias: {', '.join(definition.keywords)}</span>"
+                )
+            item.setToolTip("<br>".join(tip_parts))
             self._list.addItem(item)
 
-    def _filter(self, text: str) -> None:
-        needle = text.strip().lower()
-        for i in range(self._list.count()):
-            item = self._list.item(i)
-            key = item.data(ROLE_KEY)
-            if key is None:
-                # Category headers: keep visible when filter is empty
-                item.setHidden(bool(needle))
-                continue
-            item.setHidden(bool(needle) and needle not in item.text().lower())
+        total = len([s for s in results])
+        self._counter.setText(f"{total} / {len(stencils.CATALOG)}")
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
         key = item.data(ROLE_KEY)

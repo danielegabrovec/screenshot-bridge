@@ -472,16 +472,39 @@ class CanvasEditor(QGraphicsView):
         return None
 
     def _prompt_description(self, item: QGraphicsItem) -> None:
-        current = self._get_item_description(item)
-        text, ok = QInputDialog.getMultiLineText(
-            self,
-            "Descrizione elemento",
-            "Testo descrittivo (verrà mostrato sotto l'elemento e finirà nel PNG esportato):",
-            current,
+        # QInputDialog.getMultiLineText usa QPlainTextEdit in modalità senza
+        # word-wrap → linee lunghe escono dal bordo. Usiamo un dialog custom
+        # con WrapMode.WordWrap, che è il comportamento atteso da un editor.
+        from PyQt6.QtGui import QTextOption
+        from PyQt6.QtWidgets import (
+            QDialog, QDialogButtonBox, QPlainTextEdit, QVBoxLayout,
         )
-        if not ok:
+        current = self._get_item_description(item)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Descrizione elemento")
+        dlg.resize(560, 300)
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(QLabel(
+            "Testo descrittivo (verrà mostrato sotto l'elemento e finirà nel PNG esportato):",
+            dlg,
+        ))
+        edit = QPlainTextEdit(current, dlg)
+        edit.setWordWrapMode(QTextOption.WrapMode.WordWrap)
+        edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        edit.setTabChangesFocus(True)
+        layout.addWidget(edit, stretch=1)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel,
+            parent=dlg,
+        )
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+        edit.setFocus()
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self._set_item_description(item, text.strip())
+        self._set_item_description(item, edit.toPlainText().strip())
 
     def _get_item_description(self, item: QGraphicsItem) -> str:
         v = item.data(ITEM_DESCRIPTION_ROLE)
