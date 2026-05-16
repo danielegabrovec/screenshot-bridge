@@ -1034,32 +1034,40 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{count} annotazioni rimosse.", 3000)
 
     def _copy_multi_for_claude(self, tasks: list) -> None:
-        """Concatena gli handoff text di N task in un blocco multi-riga."""
+        """Genera un blocco testo che Claude Code possa parsare come N
+        file distinti. Senza questo formato, Claude legge solo il primo
+        path (perché ogni riga inizia con prosa "Vedi screenshot: …")."""
         if not tasks:
             return
-        template = self.settings.handoff_template()
-        lines: list[str] = []
-        ok_count = 0
-        for t in tasks:
+        if len(tasks) == 1:
+            # Singolo task: usa il template handoff normale.
+            template = self.settings.handoff_template()
             try:
-                lines.append(storage.claude_handoff_text(t, template))
-                ok_count += 1
-            except (KeyError, ValueError, IndexError):
-                continue
-        if not lines:
-            QMessageBox.warning(
-                self, "Template non valido",
-                "Nessun task formattato correttamente. Controlla il template "
-                "in Impostazioni › Template handoff Claude.",
-            )
-            return
-        # Header che spiega a Claude che sono N immagini
-        header = f"Vedi questi {ok_count} screenshot:\n"
-        text = header + "\n".join(lines)
+                text = storage.claude_handoff_text(tasks[0], template)
+            except (KeyError, ValueError, IndexError) as exc:
+                QMessageBox.warning(
+                    self, "Template non valido",
+                    f"Errore nel template handoff:\n  {exc}",
+                )
+                return
+        else:
+            # Multi-task: formato che Claude riconosce come lista di file:
+            # path "nudi" su righe proprie, descrizione indentata sotto.
+            lines: list[str] = [
+                f"Vedi questi {len(tasks)} screenshot e applica le modifiche "
+                "descritte per ciascuno:",
+                "",
+            ]
+            for i, t in enumerate(tasks, 1):
+                lines.append(f"{i}. {t.png_path}")
+                if t.description:
+                    lines.append(f"   Da fare: {t.description}")
+                lines.append("")
+            text = "\n".join(lines).rstrip()
         QGuiApplication.clipboard().setText(text)
         self._flash_copy_btn(self._copy_claude_btn, "Copia per Claude")
         self.statusBar().showMessage(
-            f"✓ {ok_count} screenshot copiati per Claude negli appunti", 5000
+            f"✓ {len(tasks)} screenshot copiati per Claude negli appunti", 5000
         )
 
     def _copy_multi_paths(self, tasks: list) -> None:
