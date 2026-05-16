@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build / dist
+build/
+dist/
+
+# Runtime artifacts: screenshot personali dell'utente — NON committare
+screenshots/da-fare/*
+screenshots/completati/*
+!screenshots/da-fare/.gitkeep
+!screenshots/completati/.gitkeep
+
+# Settings utente (vivono in %LOCALAPPDATA% comunque, ma per sicurezza)
+*.ini
+settings.ini
