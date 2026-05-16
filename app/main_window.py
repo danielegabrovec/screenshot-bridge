@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         self._tools_group.setExclusive(True)
 
         self._action_for_tool["select"] = self._add_tool_action(
-            tb_an, "Sposta", "fa5s.mouse-pointer", "select", checked=True,
+            tb_an, "Sposta", "fa5s.hand-paper", "select", checked=True,
             tooltip=(
                 "Sposta / seleziona gli elementi (nessun disegno).\n"
                 "• Click su un elemento → maniglie di resize/rotate\n"
