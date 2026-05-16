@@ -53,10 +53,12 @@ from .tools import (
     HighlightRectTool,
     HighlighterTool,
     LineTool,
+    LinkedCommentTool,
     NumberStampTool,
     PenTool,
     RectTool,
     RedactTool,
+    TableTool,
     TextTool,
 )
 
@@ -126,8 +128,10 @@ class MainWindow(QMainWindow):
             "ellipse": EllipseTool(),
             "text": TextTool(),
             "callout": CalloutTool(),
+            "linked_comment": LinkedCommentTool(),
             "brace": BraceTool(),
             "corner_marker": CornerMarkerTool(),
+            "table": TableTool(),
             "pen": PenTool(),
             "highlighter": HighlighterTool(),
             "highlight_rect": HighlightRectTool(),
@@ -259,13 +263,13 @@ class MainWindow(QMainWindow):
         # ApplicationShortcut bypassa la catena di focus.
         paste_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self._add_action(
-            tb_in, "Cattura area", "fa5s.crop-alt",
+            tb_in, "Cattura area", "mdi.crop",
             shortcut=QKeySequence("Ctrl+Shift+S"),
             tooltip="Seleziona un'area dello schermo da catturare.\nScorciatoia: Ctrl+Shift+S",
             callback=self._start_capture,
         )
         self._add_action(
-            tb_in, "Schermo intero", "fa5s.desktop",
+            tb_in, "Schermo intero", "mdi.monitor",
             shortcut=QKeySequence("F12"),
             tooltip="Cattura subito tutto lo schermo (F12)",
             callback=self._capture_fullscreen,
@@ -304,7 +308,7 @@ class MainWindow(QMainWindow):
         tb_in.addSeparator()
 
         self._add_action(
-            tb_in, "Pannello Stencil", "fa5s.th-large",
+            tb_in, "Pannello Stencil", "mdi.view-grid-outline",
             checkable=True, checked=True,
             tooltip="Mostra/nascondi il pannello con i mockup UI (button, input, dropdown…)",
             callback=lambda v=True: self._stencil_dock.setVisible(v),
@@ -353,11 +357,11 @@ class MainWindow(QMainWindow):
             tooltip="Freccia bidirezionale ↔ (scambi, misure, simmetrie). Shift = snap 45°.",
         )
         self._action_for_tool["line"] = self._add_tool_action(
-            tb_an, "Linea", "fa5s.minus", "line",
+            tb_an, "Linea", "mdi.vector-line", "line",
             tooltip="Linea retta semplice. Shift = snap a 45°.",
         )
         self._action_for_tool["dashed_line"] = self._add_tool_action(
-            tb_an, "Linea trattegg.", "fa5s.grip-lines", "dashed_line",
+            tb_an, "Linea trattegg.", "mdi.dots-horizontal", "dashed_line",
             tooltip="Linea tratteggiata. Utile per divisioni o assi virtuali.",
         )
         self._action_for_tool["curve"] = self._add_tool_action(
@@ -377,16 +381,33 @@ class MainWindow(QMainWindow):
             tooltip="Inserisce una nota di testo. Click sul canvas per piazzarla.",
         )
         self._action_for_tool["callout"] = self._add_tool_action(
-            tb_an, "Callout", "fa5s.comment-dots", "callout",
-            tooltip="Banner di commento con punta verso un punto. Drag dalla punta al body.",
+            tb_an, "Callout", "mdi.comment-text-outline", "callout",
+            tooltip="Banner di commento con punta verso un punto. Drag dalla punta al body, poi scrivi.",
+        )
+        self._action_for_tool["linked_comment"] = self._add_tool_action(
+            tb_an, "Commento", "mdi.tooltip-text-outline", "linked_comment",
+            tooltip=(
+                "Commento spostabile collegato a un punto con linea tratteggiata.\n"
+                "Click sul punto da commentare, trascina dove vuoi il box, scrivi.\n"
+                "Sposta poi il box: la linea segue automaticamente."
+            ),
         )
         self._action_for_tool["brace"] = self._add_tool_action(
             tb_an, "Graffa", "mdi.code-braces", "brace",
             tooltip="Parentesi graffa { } per raggruppare un'area. Drag verticale o orizzontale.",
         )
         self._action_for_tool["corner_marker"] = self._add_tool_action(
-            tb_an, "Angoli", "fa5s.expand", "corner_marker",
-            tooltip="4 angoli a 'L' per evidenziare un'area SENZA coprirla.",
+            tb_an, "Angoli", "mdi.crop-free", "corner_marker",
+            tooltip="4 angolini a 'L' per evidenziare un'area SENZA coprirla.",
+        )
+        self._action_for_tool["table"] = self._add_tool_action(
+            tb_an, "Tabella", "mdi.table-large", "table",
+            tooltip=(
+                "Tabella con celle editabili (3×3 di default).\n"
+                "Trascina sul canvas per definire le dimensioni.\n"
+                "Doppio click su una cella per scrivere.\n"
+                "Tasto destro → aggiungi/rimuovi righe e colonne."
+            ),
         )
         self._action_for_tool["pen"] = self._add_tool_action(
             tb_an, "Penna", "fa5s.pen", "pen",
@@ -397,15 +418,15 @@ class MainWindow(QMainWindow):
             tooltip="Tratto semi-trasparente per evidenziare aree",
         )
         self._action_for_tool["highlight_rect"] = self._add_tool_action(
-            tb_an, "Evid. rettangolo", "fa5s.marker", "highlight_rect",
+            tb_an, "Evid. area", "mdi.format-color-highlight", "highlight_rect",
             tooltip="Rettangolo evidenziatore semi-trasparente (Shift = quadrato)",
         )
         self._action_for_tool["redact"] = self._add_tool_action(
-            tb_an, "Redact", "fa5s.user-secret", "redact",
-            tooltip="Copre un'area con un rettangolo 'REDACTED' (privacy)",
+            tb_an, "Nascondi", "mdi.eye-off-outline", "redact",
+            tooltip="Copre un'area con un rettangolo 'REDACTED' (privacy / dati sensibili)",
         )
         self._action_for_tool["number_stamp"] = self._add_tool_action(
-            tb_an, "Numero", "fa5s.list-ol", "number_stamp",
+            tb_an, "Numero", "mdi.numeric", "number_stamp",
             tooltip="Stampa cerchi numerati 1, 2, 3… ad ogni click (Esc resetta)",
         )
         self._action_for_tool["check_stamp"] = self._add_tool_action(
@@ -451,7 +472,7 @@ class MainWindow(QMainWindow):
             callback=self.canvas.redo,
         )
         self._add_action(
-            tb_an, "Pulisci", "fa5s.trash-alt",
+            tb_an, "Pulisci", "mdi.broom",
             tooltip="Rimuove TUTTE le annotazioni (frecce, stencil, testi…) "
                     "mantenendo lo screenshot di base. Chiede conferma.",
             callback=self._clear_annotations,
@@ -483,10 +504,12 @@ class MainWindow(QMainWindow):
             "double_arrow": "Doppia freccia", "line": "Linea",
             "dashed_line": "Linea trattegg.", "curve": "Curva",
             "rect": "Rettangolo", "ellipse": "Cerchio", "text": "Testo",
-            "callout": "Callout", "brace": "Graffa",
-            "corner_marker": "Angoli", "pen": "Penna",
-            "highlighter": "Evidenziatore", "highlight_rect": "Evid. rect",
-            "redact": "Redact", "number_stamp": "Numero",
+            "callout": "Callout", "linked_comment": "Commento",
+            "brace": "Graffa",
+            "corner_marker": "Angoli", "table": "Tabella",
+            "pen": "Penna",
+            "highlighter": "Evidenziatore", "highlight_rect": "Evid. area",
+            "redact": "Nascondi", "number_stamp": "Numero",
             "check_stamp": "OK ✓", "cross_stamp": "NO ✗",
         }
         self._sb_tool.setText(f"Strumento: {labels.get(tool_key, tool_key)}")

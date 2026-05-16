@@ -154,9 +154,15 @@ class CalloutTool(BaseTool):
         # focus arriva DOPO che il release è stato processato.
         if text_item is not None:
             def _grab_focus() -> None:
-                # Item potrebbe essere stato rimosso nel frattempo
-                if text_item.scene() is None:
+                sc = text_item.scene()
+                if sc is None:
                     return
+                # setFocusItem sulla scena forza Qt ad assegnare il focus al
+                # text_item DENTRO la scena, anche se il group catturerebbe
+                # altrimenti. Senza questo, dopo il release del mouse il
+                # focus va al group (perché ItemIsMovable+IsSelectable) e
+                # il QGraphicsTextItem child non lo riceve mai.
+                sc.setFocusItem(text_item, Qt.FocusReason.MouseFocusReason)
                 text_item.setFocus(Qt.FocusReason.MouseFocusReason)
                 cursor = text_item.textCursor()
                 cursor.select(cursor.SelectionType.Document)

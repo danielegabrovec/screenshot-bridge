@@ -392,13 +392,22 @@ class CanvasEditor(QGraphicsView):
         event.accept()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]
-        # Doppio click su un callout → entra in editing del testo interno.
+        # Doppio click su un callout o un commento collegato → editing del testo.
         if event.button() == Qt.MouseButton.LeftButton:
             pos = self.mapToScene(event.position().toPoint())
             item = self._top_user_item_at(pos)
-            if item is not None and getattr(item, "IS_CALLOUT", False):
-                text_item = getattr(item, "_callout_text", None)
+            if item is not None:
+                text_item = None
+                if getattr(item, "IS_CALLOUT", False):
+                    text_item = getattr(item, "_callout_text", None)
+                elif getattr(item, "IS_LINKED_COMMENT", False):
+                    # API esposta: item.text_item()
+                    fn = getattr(item, "text_item", None)
+                    text_item = fn() if callable(fn) else None
                 if text_item is not None and text_item.scene() is self._scene:
+                    self._scene.setFocusItem(
+                        text_item, Qt.FocusReason.MouseFocusReason
+                    )
                     text_item.setFocus(Qt.FocusReason.MouseFocusReason)
                     cursor = text_item.textCursor()
                     cursor.select(cursor.SelectionType.Document)
@@ -439,12 +448,32 @@ class CanvasEditor(QGraphicsView):
         item = self._top_user_item_at(scene_pos)
         if item is None:
             return super().contextMenuEvent(event)
+        # Se il click è dentro a una tabella (su una cella o sul suo sfondo),
+        # il context menu opera sul TableItem intero, non sulla singola cella.
+        table_root = self._resolve_table_root(item)
+        if table_root is not None:
+            item = table_root
         # Selezioniamo l'item cliccato così l'utente vede immediatamente su
         # cosa sta agendo, anche se non lo aveva selezionato prima.
         self._scene.clearSelection()
         item.setSelected(True)
 
         menu = QMenu(self)
+        # Voci specifiche per TableItem in cima al menu
+        if getattr(item, "IS_TABLE", False):
+            add_row = QAction("➕ Aggiungi riga", self)
+            add_row.triggered.connect(lambda _=False, t=item: t.add_row())
+            menu.addAction(add_row)
+            rem_row = QAction("➖ Rimuovi riga", self)
+            rem_row.triggered.connect(lambda _=False, t=item: t.remove_row())
+            menu.addAction(rem_row)
+            add_col = QAction("➕ Aggiungi colonna", self)
+            add_col.triggered.connect(lambda _=False, t=item: t.add_col())
+            menu.addAction(add_col)
+            rem_col = QAction("➖ Rimuovi colonna", self)
+            rem_col.triggered.connect(lambda _=False, t=item: t.remove_col())
+            menu.addAction(rem_col)
+            menu.addSeparator()
         has_desc = bool(self._get_item_description(item))
         desc_action = QAction(
             "Modifica descrizione…" if has_desc else "Aggiungi descrizione…",
@@ -481,6 +510,16 @@ class CanvasEditor(QGraphicsView):
         del_action.triggered.connect(lambda: self._remove_item(item))
         menu.addAction(del_action)
         menu.exec(event.globalPos())
+
+    @staticmethod
+    def _resolve_table_root(item: QGraphicsItem) -> Optional[QGraphicsItem]:
+        """Risale la gerarchia parent finché trova un TableItem (IS_TABLE)."""
+        cursor: Optional[QGraphicsItem] = item
+        while cursor is not None:
+            if getattr(cursor, "IS_TABLE", False):
+                return cursor
+            cursor = cursor.parentItem()
+        return None
 
     def _top_user_item_at(self, scene_pos: QPointF) -> Optional[QGraphicsItem]:
         """Topmost item utente sotto il cursore, escludendo background e flash."""

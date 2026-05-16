@@ -9,6 +9,8 @@ from .brace_tool import BraceTool
 from .callout_tool import CalloutTool
 from .line_tool import LineTool, DashedLineTool, CurveTool, CurveItem, DoubleArrowTool
 from .marker_tool import CornerMarkerTool, CheckStampTool, CrossStampTool
+from .table_tool import TableTool, TableItem
+from .linked_comment_tool import LinkedCommentTool, LinkedCommentItem
 
 __all__ = [
     "BaseTool",
@@ -33,4 +35,8 @@ __all__ = [
     "CornerMarkerTool",
     "CheckStampTool",
     "CrossStampTool",
+    "TableTool",
+    "TableItem",
+    "LinkedCommentTool",
+    "LinkedCommentItem",
 ]
