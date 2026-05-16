@@ -368,7 +368,7 @@ class MainWindow(QMainWindow):
             tooltip="Freccia bidirezionale ↔ (scambi, misure, simmetrie). Shift = snap 45°.",
         )
         self._action_for_tool["line"] = self._add_tool_action(
-            tb_an, "Linea", "mdi.vector-line", "line",
+            tb_an, "Linea", "mdi.minus-thick", "line",
             tooltip="Linea retta semplice. Shift = snap a 45°.",
         )
         self._action_for_tool["dashed_line"] = self._add_tool_action(
@@ -376,15 +376,15 @@ class MainWindow(QMainWindow):
             tooltip="Linea tratteggiata. Utile per divisioni o assi virtuali.",
         )
         self._action_for_tool["curve"] = self._add_tool_action(
-            tb_an, "Curva", "mdi.vector-curve", "curve",
+            tb_an, "Curva", "mdi.vector-radius", "curve",
             tooltip="Linea curva (Bezier). Trascina dritto = quasi retta, piega = curva.",
         )
         self._action_for_tool["rect"] = self._add_tool_action(
-            tb_an, "Rettangolo", "far.square", "rect",
+            tb_an, "Rettangolo", "mdi.rectangle-outline", "rect",
             tooltip="Disegna un rettangolo. Shift = quadrato. Alt = dal centro.",
         )
         self._action_for_tool["ellipse"] = self._add_tool_action(
-            tb_an, "Cerchio", "far.circle", "ellipse",
+            tb_an, "Cerchio", "mdi.circle-outline", "ellipse",
             tooltip="Disegna un'ellisse. Shift = cerchio. Alt = dal centro.",
         )
         self._action_for_tool["text"] = self._add_tool_action(
@@ -392,11 +392,11 @@ class MainWindow(QMainWindow):
             tooltip="Inserisce una nota di testo. Click sul canvas per piazzarla.",
         )
         self._action_for_tool["callout"] = self._add_tool_action(
-            tb_an, "Callout", "mdi.comment-text-outline", "callout",
-            tooltip="Banner di commento con punta verso un punto. Drag dalla punta al body, poi scrivi.",
+            tb_an, "Callout", "mdi.tooltip-edit-outline", "callout",
+            tooltip="Banner di commento con punta triangolare verso un punto.\nDrag dalla punta al body, poi scrivi.",
         )
         self._action_for_tool["linked_comment"] = self._add_tool_action(
-            tb_an, "Commento", "mdi.tooltip-text-outline", "linked_comment",
+            tb_an, "Commento", "mdi.comment-arrow-right-outline", "linked_comment",
             tooltip=(
                 "Commento spostabile collegato a un punto con linea tratteggiata.\n"
                 "Click sul punto da commentare, trascina dove vuoi il box, scrivi.\n"
