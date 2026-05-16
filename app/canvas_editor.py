@@ -130,21 +130,35 @@ class CanvasEditor(QGraphicsView):
 
     # ---- Tool / style ------------------------------------------------------
 
-    def set_tool(self, tool: Optional[BaseTool]) -> None:
+    def set_tool(
+        self,
+        tool: Optional[BaseTool],
+        *,
+        mode: str = "select",
+    ) -> None:
+        """Imposta lo strumento attivo.
+
+        `mode` rilevante solo se `tool` è None (no disegno):
+          - "select" (default): drag su area vuota = rubber-band selection
+            (selezione multipla). Cursore puntatore standard.
+          - "move": drag su area vuota = niente. Cursore manina.
+            Si possono comunque cliccare/trascinare singoli item.
+        """
         self._tool = tool
         if tool is not None:
             tool.set_context(self._tool_context)
-            # Cursore custom per indicare il tool attivo.
             try:
                 self.viewport().setCursor(tool.cursor())
             except Exception:
                 self.viewport().unsetCursor()
-        else:
-            self.viewport().unsetCursor()
-        if tool is None:
-            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-        else:
             self.setDragMode(QGraphicsView.DragMode.NoDrag)
+        else:
+            if mode == "move":
+                self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+                self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            else:
+                self.viewport().unsetCursor()
+                self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
 
     def set_color(self, color: QColor) -> None:
         self._tool_context.color = QColor(color)

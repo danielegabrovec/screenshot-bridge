@@ -118,7 +118,8 @@ class MainWindow(QMainWindow):
 
         # Tools instanziati una volta sola, riusati al cambio
         self._tools_map = {
-            "select": None,
+            "select": None,  # rubber-band + drag
+            "move": None,    # solo drag (no rubber-band) — differenziato in set_tool
             "arrow": ArrowTool(),
             "double_arrow": DoubleArrowTool(),
             "line": LineTool(),
@@ -339,13 +340,23 @@ class MainWindow(QMainWindow):
         self._tools_group.setExclusive(True)
 
         self._action_for_tool["select"] = self._add_tool_action(
-            tb_an, "Sposta", "fa5s.hand-paper", "select", checked=True,
+            tb_an, "Seleziona", "fa5s.mouse-pointer", "select", checked=True,
             tooltip=(
-                "Sposta / seleziona gli elementi (nessun disegno).\n"
-                "• Click su un elemento → maniglie di resize/rotate\n"
-                "• Drag → sposta\n"
+                "Puntatore: seleziona elementi e fa selezione multipla.\n"
+                "• Click su un elemento → seleziona + maniglie resize/rotate\n"
+                "• Drag su area vuota → rubber-band per selezionare più elementi\n"
+                "• Drag su un elemento → sposta\n"
                 "• Doppio click su un callout → modifica testo\n"
                 "• Canc → elimina selezione"
+            ),
+        )
+        self._action_for_tool["move"] = self._add_tool_action(
+            tb_an, "Sposta", "fa5s.hand-paper", "move",
+            tooltip=(
+                "Manina: solo trascinamento di elementi singoli.\n"
+                "• Click+drag su un elemento → sposta\n"
+                "• Drag su area vuota → NIENTE (nessuna selezione multipla)\n"
+                "• Per selezionare più elementi usa il puntatore (Seleziona)."
             ),
         )
         self._action_for_tool["arrow"] = self._add_tool_action(
@@ -500,7 +511,7 @@ class MainWindow(QMainWindow):
     def _refresh_status_slots(self) -> None:
         tool_key = self.settings.last_tool()
         labels = {
-            "select": "Sposta", "arrow": "Freccia",
+            "select": "Seleziona", "move": "Sposta", "arrow": "Freccia",
             "double_arrow": "Doppia freccia", "line": "Linea",
             "dashed_line": "Linea trattegg.", "curve": "Curva",
             "rect": "Rettangolo", "ellipse": "Cerchio", "text": "Testo",
@@ -609,7 +620,10 @@ class MainWindow(QMainWindow):
                 tool.reset()  # type: ignore[attr-defined]
             except Exception:
                 pass
-        self.canvas.set_tool(tool)
+        # "select" → rubber-band+drag; "move" → solo drag (no rubber-band).
+        # Gli altri tool ignorano `mode` (tool != None usa sempre NoDrag).
+        mode = "move" if key == "move" else "select"
+        self.canvas.set_tool(tool, mode=mode)
         self.settings.set_last_tool(key)
         self._refresh_status_slots()
 
