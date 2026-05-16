@@ -649,6 +649,13 @@ class MainWindow(QMainWindow):
         self.task_panel.task_activated.connect(self._open_task)
         self.task_panel.mark_done_requested.connect(self._mark_done)
         self.task_panel.delete_requested.connect(self._delete_task)
+        # Azioni multi-selezione
+        self.task_panel.multi_copy_for_claude_requested.connect(
+            self._copy_multi_for_claude
+        )
+        self.task_panel.multi_copy_paths_requested.connect(self._copy_multi_paths)
+        self.task_panel.multi_mark_done_requested.connect(self._mark_done_multi)
+        self.task_panel.multi_delete_requested.connect(self._delete_multi)
 
     def _setup_watcher(self) -> None:
         self._watcher = QFileSystemWatcher(self)
@@ -1023,6 +1030,79 @@ class MainWindow(QMainWindow):
             return
         self.canvas.clear_annotations()
         self.statusBar().showMessage(f"{count} annotazioni rimosse.", 3000)
+
+    def _copy_multi_for_claude(self, tasks: list) -> None:
+        """Concatena gli handoff text di N task in un blocco multi-riga."""
+        if not tasks:
+            return
+        template = self.settings.handoff_template()
+        lines: list[str] = []
+        ok_count = 0
+        for t in tasks:
+            try:
+                lines.append(storage.claude_handoff_text(t, template))
+                ok_count += 1
+            except (KeyError, ValueError, IndexError):
+                continue
+        if not lines:
+            QMessageBox.warning(
+                self, "Template non valido",
+                "Nessun task formattato correttamente. Controlla il template "
+                "in Impostazioni › Template handoff Claude.",
+            )
+            return
+        # Header che spiega a Claude che sono N immagini
+        header = f"Vedi questi {ok_count} screenshot:\n"
+        text = header + "\n".join(lines)
+        QGuiApplication.clipboard().setText(text)
+        self._flash_copy_btn(self._copy_claude_btn, "Copia per Claude")
+        self.statusBar().showMessage(
+            f"✓ {ok_count} screenshot copiati per Claude negli appunti", 5000
+        )
+
+    def _copy_multi_paths(self, tasks: list) -> None:
+        if not tasks:
+            return
+        paths = [str(t.png_path) for t in tasks]
+        QGuiApplication.clipboard().setText("\n".join(paths))
+        self._flash_copy_btn(self._copy_path_btn, "Copia path")
+        self.statusBar().showMessage(f"✓ {len(paths)} path copiati", 5000)
+
+    def _mark_done_multi(self, tasks: list) -> None:
+        if not tasks:
+            return
+        confirm = QMessageBox.question(
+            self, "Marca completati",
+            f"Spostare {len(tasks)} screenshot in 'completati'?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        n = 0
+        for t in tasks:
+            try:
+                storage.mark_done(t.png_path)
+                n += 1
+            except Exception:
+                continue
+        self.task_panel.refresh()
+        self.statusBar().showMessage(f"{n} task marcati come completati", 4000)
+
+    def _delete_multi(self, tasks: list) -> None:
+        if not tasks:
+            return
+        confirm = QMessageBox.question(
+            self, "Conferma eliminazione",
+            f"Eliminare definitivamente {len(tasks)} screenshot?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        for t in tasks:
+            try:
+                storage.delete_task(t.png_path)
+            except Exception:
+                continue
+        self.task_panel.refresh()
+        self.statusBar().showMessage(f"{len(tasks)} task eliminati", 4000)
 
     def _delete_task(self, task: Task) -> None:
         confirm = QMessageBox.question(

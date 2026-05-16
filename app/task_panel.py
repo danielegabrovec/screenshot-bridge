@@ -10,6 +10,7 @@ from typing import Optional
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QGuiApplication, QIcon, QPixmap
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -29,16 +30,23 @@ class _TaskList(QListWidget):
     task_activated = pyqtSignal(Task)
     mark_done_requested = pyqtSignal(Task)
     delete_requested = pyqtSignal(Task)
+    multi_copy_for_claude_requested = pyqtSignal(list)  # list[Task]
+    multi_copy_paths_requested = pyqtSignal(list)       # list[Task]
+    multi_mark_done_requested = pyqtSignal(list)        # list[Task]
+    multi_delete_requested = pyqtSignal(list)           # list[Task]
 
     def __init__(self, status: str, parent=None) -> None:
         super().__init__(parent)
         self._status = status
         self.setIconSize(QSize(80, 60))
         self.setUniformItemSizes(False)
+        # Selezione multipla: Ctrl+click aggiunge/toglie, Shift+click estende.
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
-        self.itemActivated.connect(self._on_activate)
-        self.itemClicked.connect(self._on_activate)
+        # Solo doubleClick attiva l'anteprima — clic singolo gestisce la
+        # selezione (multipla) senza caricare l'immagine ad ogni click.
+        self.itemDoubleClicked.connect(self._on_activate)
 
     def populate(self, tasks: list[Task]) -> None:
         self.clear()
@@ -71,21 +79,83 @@ class _TaskList(QListWidget):
         if task is not None:
             self.task_activated.emit(task)
 
+    def selected_tasks(self) -> list[Task]:
+        out: list[Task] = []
+        for item in self.selectedItems():
+            t = self._task_for_item(item)
+            if t is not None:
+                out.append(t)
+        return out
+
     def _on_context_menu(self, pos) -> None:
         item = self.itemAt(pos)
         if item is None:
             return
-        task = self._task_for_item(item)
-        if task is None:
-            return
-        png_path = task.png_path
+        # Se il click è su un item non ancora selezionato, lo selezioniamo
+        # da solo. Se l'item è già nella selezione corrente, manteniamo
+        # la selezione multipla esistente.
+        if not item.isSelected():
+            self.clearSelection()
+            item.setSelected(True)
+
+        selected = self.selected_tasks()
+        if not selected:
+            task = self._task_for_item(item)
+            if task is None:
+                return
+            selected = [task]
 
         menu = QMenu(self)
 
-        # Azioni di "condivisione" del path — sono quelle che la maggior
-        # parte degli utenti cerca col tasto destro: aprire, condividere o
-        # incollare il path da qualche altra parte (es. nel prompt di
-        # Claude). Le mettiamo PRIMA perché sono le più richieste.
+        if len(selected) > 1:
+            # === Azioni MULTIPLE ===
+            multi_label = f"{len(selected)} elementi selezionati"
+            header = QAction(multi_label, self)
+            header.setEnabled(False)
+            menu.addAction(header)
+            menu.addSeparator()
+
+            copy_claude = QAction(f"📋 Copia per Claude ({len(selected)} immagini)", self)
+            copy_claude.triggered.connect(
+                lambda _=False, tasks=list(selected):
+                self.multi_copy_for_claude_requested.emit(tasks)
+            )
+            menu.addAction(copy_claude)
+
+            copy_paths = QAction(f"Copia path ({len(selected)})", self)
+            copy_paths.triggered.connect(
+                lambda _=False, tasks=list(selected):
+                self.multi_copy_paths_requested.emit(tasks)
+            )
+            menu.addAction(copy_paths)
+
+            menu.addSeparator()
+            if self._status == "pending":
+                mark_done_multi = QAction(f"Marca come completati ({len(selected)})", self)
+                mark_done_multi.triggered.connect(
+                    lambda _=False, tasks=list(selected):
+                    self.multi_mark_done_requested.emit(tasks)
+                )
+                menu.addAction(mark_done_multi)
+
+            del_multi = QAction(f"Elimina ({len(selected)})", self)
+            del_multi.triggered.connect(
+                lambda _=False, tasks=list(selected):
+                self.multi_delete_requested.emit(tasks)
+            )
+            menu.addAction(del_multi)
+            menu.exec(self.mapToGlobal(pos))
+            return
+
+        # === Azione SINGOLA (legacy) ===
+        task = selected[0]
+        png_path = task.png_path
+
+        open_anno = QAction("Apri annotazione (carica nel canvas)", self)
+        open_anno.triggered.connect(lambda: self.task_activated.emit(task))
+        menu.addAction(open_anno)
+        menu.addSeparator()
+
         copy_path_action = QAction("Copia path", self)
         copy_path_action.setShortcut("Ctrl+Shift+C")
         copy_path_action.triggered.connect(lambda: self._copy_to_clipboard(str(png_path)))
@@ -157,6 +227,10 @@ class TaskPanel(QWidget):
     task_activated = pyqtSignal(Task)
     mark_done_requested = pyqtSignal(Task)
     delete_requested = pyqtSignal(Task)
+    multi_copy_for_claude_requested = pyqtSignal(list)  # list[Task]
+    multi_copy_paths_requested = pyqtSignal(list)       # list[Task]
+    multi_mark_done_requested = pyqtSignal(list)        # list[Task]
+    multi_delete_requested = pyqtSignal(list)           # list[Task]
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -173,6 +247,12 @@ class TaskPanel(QWidget):
             lst.task_activated.connect(self.task_activated)
             lst.mark_done_requested.connect(self.mark_done_requested)
             lst.delete_requested.connect(self.delete_requested)
+            lst.multi_copy_for_claude_requested.connect(
+                self.multi_copy_for_claude_requested
+            )
+            lst.multi_copy_paths_requested.connect(self.multi_copy_paths_requested)
+            lst.multi_mark_done_requested.connect(self.multi_mark_done_requested)
+            lst.multi_delete_requested.connect(self.multi_delete_requested)
 
         self.refresh()
 
