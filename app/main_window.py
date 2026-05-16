@@ -153,28 +153,27 @@ class MainWindow(QMainWindow):
     # ---- Menu --------------------------------------------------------------
 
     def _build_menubar(self) -> None:
+        # IMPORTANTE: gli shortcut delle azioni "doppione" (Paste/Save/Open/Capture/F12)
+        # vivono SOLO nelle QAction della toolbar. Definirli anche qui crea
+        # un "Ambiguous shortcut overload" e Qt non scatta nessuna delle due.
+        # Le voci di menu sotto sono solo "trigger" senza shortcut.
         mb = self.menuBar()
         m_file = mb.addMenu("&File")
         a_paste = QAction("Incolla dagli appunti", self)
-        a_paste.setShortcut(QKeySequence.StandardKey.Paste)
-        a_paste.triggered.connect(self._paste_from_clipboard)
+        a_paste.triggered.connect(lambda _=False: self._paste_from_clipboard())
         m_file.addAction(a_paste)
         a_capture = QAction("Cattura area…", self)
-        a_capture.setShortcut(QKeySequence("Ctrl+Shift+S"))
-        a_capture.triggered.connect(self._start_capture)
+        a_capture.triggered.connect(lambda _=False: self._start_capture())
         m_file.addAction(a_capture)
         a_fullscreen = QAction("Cattura schermo intero", self)
-        a_fullscreen.setShortcut(QKeySequence("F12"))
-        a_fullscreen.triggered.connect(self._capture_fullscreen)
+        a_fullscreen.triggered.connect(lambda _=False: self._capture_fullscreen())
         m_file.addAction(a_fullscreen)
         a_open = QAction("Apri file…", self)
-        a_open.setShortcut(QKeySequence.StandardKey.Open)
-        a_open.triggered.connect(self._open_file_dialog)
+        a_open.triggered.connect(lambda _=False: self._open_file_dialog())
         m_file.addAction(a_open)
         m_file.addSeparator()
         a_save = QAction("Salva in 'da-fare'…", self)
-        a_save.setShortcut(QKeySequence.StandardKey.Save)
-        a_save.triggered.connect(self._save_current)
+        a_save.triggered.connect(lambda _=False: self._save_current())
         m_file.addAction(a_save)
         m_file.addSeparator()
         a_quit = QAction("Esci", self)
