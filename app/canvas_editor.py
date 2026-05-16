@@ -76,6 +76,14 @@ class CanvasEditor(QGraphicsView):
         self._stencil_cascade = 0
         self._flash_items: set[QGraphicsItem] = set()
         self._modifiers: Qt.KeyboardModifier = Qt.KeyboardModifier.NoModifier
+        # Se True, il press ha effettivamente iniziato un nuovo disegno;
+        # mouse move/release vanno al tool. Se False (es. click sopra un
+        # item esistente), gli eventi sono delegati a QGraphicsView per
+        # selezione + drag standard.
+        self._drawing = False
+        # Abilita gli eventi di hover sul viewport (per cambiare cursore
+        # quando passiamo sopra un item esistente).
+        self.viewport().setMouseTracking(True)
 
         # Handle manager: mostra maniglie di resize/rotate sull'item selezionato
         # e endpoint handle sulle frecce. I suoi handle vengono registrati in
@@ -320,6 +328,18 @@ class CanvasEditor(QGraphicsView):
             return super().mousePressEvent(event)
         self._modifiers = event.modifiers()
         pos = self.mapToScene(event.position().toPoint())
+
+        # Comportamento standard delle app grafiche (Figma, Inkscape, …):
+        # se sotto al cursore c'è già un elemento selezionabile, NON iniziare
+        # un nuovo disegno — passa la mano a QGraphicsView per selezione+drag.
+        existing = self._top_user_item_at(pos)
+        if existing is not None and bool(
+            existing.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+        ):
+            self._drawing = False
+            return super().mousePressEvent(event)
+
+        self._drawing = True
         item = self._tool.on_press(self._scene, pos, modifiers=self._modifiers)
         if item is not None:
             self._undo_stack.append(item)
@@ -331,15 +351,35 @@ class CanvasEditor(QGraphicsView):
             return super().mouseMoveEvent(event)
         self._modifiers = event.modifiers()
         pos = self.mapToScene(event.position().toPoint())
+
+        if not self._drawing:
+            # Hover: cambia cursore per indicare "click qui = selezione" vs
+            # "click qui = disegno nuovo elemento".
+            existing = self._top_user_item_at(pos)
+            if existing is not None and bool(
+                existing.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsSelectable
+            ):
+                self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            else:
+                try:
+                    self.viewport().setCursor(self._tool.cursor())
+                except Exception:
+                    self.viewport().unsetCursor()
+            return super().mouseMoveEvent(event)
+
         self._tool.on_move(self._scene, pos, modifiers=self._modifiers)
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if self._read_only or self._tool is None or event.button() != Qt.MouseButton.LeftButton:
+        if event.button() != Qt.MouseButton.LeftButton:
+            return super().mouseReleaseEvent(event)
+        if self._read_only or self._tool is None or not self._drawing:
+            self._drawing = False
             return super().mouseReleaseEvent(event)
         self._modifiers = event.modifiers()
         pos = self.mapToScene(event.position().toPoint())
         self._tool.on_release(self._scene, pos, modifiers=self._modifiers)
+        self._drawing = False
         event.accept()
 
     def wheelEvent(self, event) -> None:  # type: ignore[override]
