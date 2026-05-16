@@ -230,12 +230,16 @@ class MainWindow(QMainWindow):
 
         tb_in.addWidget(self._section_label("Acquisisci"))
 
-        self._add_action(
+        paste_action = self._add_action(
             tb_in, "Incolla", "fa5s.paste",
             shortcut=QKeySequence.StandardKey.Paste,
             tooltip="Incolla l'immagine dagli appunti (es. dopo Win+Shift+S).\nScorciatoia: Ctrl+V",
             callback=self._paste_from_clipboard,
         )
+        # Lo shortcut deve scattare anche se il focus è nel QGraphicsView del canvas
+        # (che non è una "child window" Qt standard ma intercetta i tasti).
+        # ApplicationShortcut bypassa la catena di focus.
+        paste_action.setShortcutContext(Qt.ShortcutContext.ApplicationShortcut)
         self._add_action(
             tb_in, "Cattura area", "fa5s.crop-alt",
             shortcut=QKeySequence("Ctrl+Shift+S"),
@@ -547,22 +551,89 @@ class MainWindow(QMainWindow):
     # ---- Actions: input ----------------------------------------------------
 
     def _paste_from_clipboard(self) -> None:
+        """Cerca un'immagine negli appunti provando più strade in cascata.
+
+        Su Windows il clipboard contiene immagini in formati eterogenei
+        (CF_DIB, CF_BITMAP, image/png raw, file URL). Proviamo:
+        1. `clipboard.image()`        → QImage diretta
+        2. `clipboard.pixmap()`       → QPixmap (DIB → BMP)
+        3. `mimeData().imageData()`   → QVariant convertito a QImage
+        4. bytes raw nei format image/png, image/bmp, image/jpeg
+        5. URL locali in `mimeData().urls()` (drag dal File Explorer)
+        Se proprio non c'è nulla, mostro un dialog con i formati visti.
+        """
+        from PyQt6.QtGui import QImage, QPixmap
         clipboard = QGuiApplication.clipboard()
         md = clipboard.mimeData()
-        if md.hasImage():
-            img = clipboard.image()
-            if not img.isNull():
-                self.canvas.set_read_only(False)
-                self.canvas.load_image(img)
-                self.statusBar().showMessage("Immagine incollata dagli appunti", 3000)
-                return
+        # Feedback immediato: l'utente saprà che Ctrl+V è scattato.
+        self.statusBar().showMessage("Lettura appunti…", 1500)
+
+        # 1) QImage diretta
+        img = clipboard.image()
+        if not img.isNull():
+            self.canvas.set_read_only(False)
+            self.canvas.load_image(img)
+            self.statusBar().showMessage(
+                f"Immagine incollata ({img.width()}×{img.height()})", 3000)
+            return
+
+        # 2) QPixmap (alcuni formati Windows arrivano come bitmap, non image)
+        pix = clipboard.pixmap()
+        if not pix.isNull():
+            self.canvas.set_read_only(False)
+            self.canvas.load_pixmap(pix)
+            self.statusBar().showMessage(
+                f"Immagine incollata ({pix.width()}×{pix.height()})", 3000)
+            return
+
+        # 3) imageData() raw QVariant
+        try:
+            raw = md.imageData()
+        except Exception:
+            raw = None
+        if raw is not None:
+            try:
+                img2 = QImage(raw)
+                if not img2.isNull():
+                    self.canvas.set_read_only(False)
+                    self.canvas.load_image(img2)
+                    self.statusBar().showMessage("Immagine incollata (raw)", 3000)
+                    return
+            except Exception:
+                pass
+
+        # 4) bytes raw in formati comuni
+        for fmt in ("image/png", "image/bmp", "image/jpeg", "image/jpg",
+                    "application/x-qt-image"):
+            if md.hasFormat(fmt):
+                data = bytes(md.data(fmt))
+                img3 = QImage.fromData(data)
+                if not img3.isNull():
+                    self.canvas.set_read_only(False)
+                    self.canvas.load_image(img3)
+                    self.statusBar().showMessage(
+                        f"Immagine incollata ({fmt.split('/')[-1].upper()})", 3000)
+                    return
+
+        # 5) URL locali (drag/paste da File Explorer)
         if md.hasUrls():
             for url in md.urls():
                 if url.isLocalFile() and self.canvas.load_file(url.toLocalFile()):
                     self.canvas.set_read_only(False)
-                    self.statusBar().showMessage(f"Caricato: {url.toLocalFile()}", 3000)
+                    self.statusBar().showMessage(
+                        f"Caricato: {url.toLocalFile()}", 3000)
                     return
-        QMessageBox.information(self, "Incolla", "Nessuna immagine negli appunti.")
+
+        # Niente di utilizzabile: mostra cosa c'era nel clipboard per debug.
+        fmts = ", ".join(md.formats()) or "(vuoto)"
+        QMessageBox.information(
+            self, "Incolla",
+            "Nessuna immagine utilizzabile negli appunti.\n\n"
+            f"Formati visti: {fmts}\n\n"
+            "Suggerimento: usa Win+Shift+S, poi clicca sulla notifica di "
+            "Windows in basso a destra prima di tornare qui (su Windows 11 "
+            "alcuni snip vanno nel clipboard solo dopo quel click)."
+        )
 
     def _start_capture(self) -> None:
         self.hide()
