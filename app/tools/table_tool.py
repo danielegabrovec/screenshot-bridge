@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QGraphicsItemGroup,
     QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSceneMouseEvent,
     QGraphicsTextItem,
 )
 
@@ -109,6 +110,34 @@ class TableItem(QGraphicsItemGroup):
         self._rebuild(preserve=True)
 
     # ---- internal ----------------------------------------------------------
+
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # type: ignore[override]
+        """Click su una cella → focus al text item interno per editing.
+        Click su area non-cella (bordo, fra le celle) → drag del group."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            sc = self.scene()
+            if sc is not None:
+                for it in sc.items(event.scenePos()):
+                    if not isinstance(it, QGraphicsTextItem):
+                        continue
+                    # Verifica sia child di questo TableItem
+                    parent = it.parentItem()
+                    is_child = False
+                    while parent is not None:
+                        if parent is self:
+                            is_child = True
+                            break
+                        parent = parent.parentItem()
+                    if not is_child:
+                        continue
+                    sc.clearSelection()
+                    sc.setFocusItem(it, Qt.FocusReason.MouseFocusReason)
+                    it.setFocus(Qt.FocusReason.MouseFocusReason)
+                    for view in sc.views():
+                        view.setFocus(Qt.FocusReason.MouseFocusReason)
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
 
     def _rebuild(self, *, preserve: bool) -> None:
         # Salva contenuti correnti prima di distruggere

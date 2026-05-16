@@ -15,10 +15,57 @@ from PyQt6.QtWidgets import (
     QGraphicsItemGroup,
     QGraphicsPathItem,
     QGraphicsScene,
+    QGraphicsSceneMouseEvent,
     QGraphicsTextItem,
 )
 
 from .base_tool import BaseTool
+
+
+def _give_focus_to_text_child(group: QGraphicsItemGroup, scene_pos: QPointF) -> bool:
+    """Se sotto scene_pos c'è un QGraphicsTextItem child editabile, gli dà
+    il focus e ritorna True. Altrimenti False (l'evento andrà al group)."""
+    sc = group.scene()
+    if sc is None:
+        return False
+    for it in sc.items(scene_pos):
+        if not isinstance(it, QGraphicsTextItem):
+            continue
+        # Risali il parent chain: deve essere child del nostro group
+        parent = it.parentItem()
+        is_child = False
+        while parent is not None:
+            if parent is group:
+                is_child = True
+                break
+            parent = parent.parentItem()
+        if not is_child:
+            continue
+        if not (it.textInteractionFlags() & Qt.TextInteractionFlag.TextEditorInteraction):
+            continue
+        # Dai focus immediato
+        sc.clearSelection()
+        sc.setFocusItem(it, Qt.FocusReason.MouseFocusReason)
+        it.setFocus(Qt.FocusReason.MouseFocusReason)
+        for view in sc.views():
+            view.setFocus(Qt.FocusReason.MouseFocusReason)
+        return True
+    return False
+
+
+class _CalloutGroup(QGraphicsItemGroup):
+    """Group del callout. Override mousePressEvent per dare priorità al
+    text item interno (altrimenti il group movable cattura il click e
+    l'editing non parte)."""
+
+    IS_CALLOUT = True
+
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            if _give_focus_to_text_child(self, event.scenePos()):
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 def _build_callout_path(tip: QPointF, body_rect: QRectF) -> QPainterPath:
@@ -82,7 +129,7 @@ class CalloutTool(BaseTool):
         # Body iniziale: piccolo riquadro a partire dalla punta.
         self._body_start = QPointF(pos.x() + 40, pos.y() + 40)
 
-        group = QGraphicsItemGroup()
+        group = _CalloutGroup()
         group.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         group.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
 
@@ -157,17 +204,25 @@ class CalloutTool(BaseTool):
                 sc = text_item.scene()
                 if sc is None:
                     return
-                # setFocusItem sulla scena forza Qt ad assegnare il focus al
-                # text_item DENTRO la scena, anche se il group catturerebbe
-                # altrimenti. Senza questo, dopo il release del mouse il
-                # focus va al group (perché ItemIsMovable+IsSelectable) e
-                # il QGraphicsTextItem child non lo riceve mai.
-                sc.setFocusItem(text_item, Qt.FocusReason.MouseFocusReason)
-                text_item.setFocus(Qt.FocusReason.MouseFocusReason)
+                # 1. Deseleziona TUTTO (incluso il group del callout) per
+                #    evitare che il group rubi il focus al text item.
+                sc.clearSelection()
+                # 2. Forza il view ad avere keyboard focus (altrimenti gli
+                #    eventi tastiera non arrivano a Qt → nessuno digita).
+                for view in sc.views():
+                    view.setFocus(Qt.FocusReason.OtherFocusReason)
+                # 3. Assegna il focus item della scena al text_item.
+                sc.setFocusItem(text_item, Qt.FocusReason.OtherFocusReason)
+                text_item.setFocus(Qt.FocusReason.OtherFocusReason)
+                # 4. Seleziona "Scrivi qui…" così basta digitare per
+                #    sostituirlo.
                 cursor = text_item.textCursor()
                 cursor.select(cursor.SelectionType.Document)
                 text_item.setTextCursor(cursor)
-            QTimer.singleShot(0, _grab_focus)
+            # 50ms invece di 0: dà a Qt il tempo di completare il proprio
+            # focus management dopo il mouseReleaseEvent. Con 0 Qt poteva
+            # ancora sovrascrivere il focus subito dopo.
+            QTimer.singleShot(50, _grab_focus)
         self._group = None
         self._path_item = None
         self._text_item = None

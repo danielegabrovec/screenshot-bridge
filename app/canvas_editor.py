@@ -421,6 +421,11 @@ class CanvasEditor(QGraphicsView):
         pos = self.mapToScene(event.position().toPoint())
         self._tool.on_release(self._scene, pos, modifiers=self._modifiers)
         self._drawing = False
+        # CRUCIALE: la view deve avere il keyboard focus per propagare i tasti
+        # al focusItem della scena. Senza questo, dopo event.accept() Qt non
+        # invia eventi key al text item del callout → l'utente non riesce a
+        # digitare nel banner appena creato.
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
         event.accept()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # type: ignore[override]

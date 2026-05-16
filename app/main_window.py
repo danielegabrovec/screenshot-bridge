@@ -395,14 +395,16 @@ class MainWindow(QMainWindow):
             tb_an, "Callout", "mdi.tooltip-edit-outline", "callout",
             tooltip="Banner di commento con punta triangolare verso un punto.\nDrag dalla punta al body, poi scrivi.",
         )
-        self._action_for_tool["linked_comment"] = self._add_tool_action(
-            tb_an, "Commento", "mdi.comment-arrow-right-outline", "linked_comment",
-            tooltip=(
-                "Commento spostabile collegato a un punto con linea tratteggiata.\n"
-                "Click sul punto da commentare, trascina dove vuoi il box, scrivi.\n"
-                "Sposta poi il box: la linea segue automaticamente."
-            ),
-        )
+        # TODO: "Commento collegato" (linked_comment) nascosto temporaneamente
+        # dalla toolbar perché in stato non soddisfacente (vedi
+        # linked_comment_tool.py). Il tool è ancora registrato in
+        # _tools_map e il codice esiste — riattivare riabilitando la riga
+        # sotto quando le issue di focus testo + resize maniglie saranno
+        # risolte.
+        # self._action_for_tool["linked_comment"] = self._add_tool_action(
+        #     tb_an, "Commento", "mdi.comment-arrow-right-outline",
+        #     "linked_comment", tooltip="…",
+        # )
         self._action_for_tool["brace"] = self._add_tool_action(
             tb_an, "Graffa", "mdi.code-braces", "brace",
             tooltip="Parentesi graffa { } per raggruppare un'area. Drag verticale o orizzontale.",

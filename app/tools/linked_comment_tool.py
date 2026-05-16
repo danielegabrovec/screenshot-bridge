@@ -30,6 +30,7 @@ from PyQt6.QtWidgets import (
     QGraphicsLineItem,
     QGraphicsPathItem,
     QGraphicsScene,
+    QGraphicsSceneMouseEvent,
     QGraphicsTextItem,
 )
 
@@ -195,6 +196,21 @@ class LinkedCommentItem(QGraphicsItemGroup):
             self._update_link()
         return super().itemChange(change, value)
 
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # type: ignore[override]
+        """Click sul testo → focus per editing. Click altrove → drag del body."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            sc = self.scene()
+            if sc is not None and self._text is not None:
+                if self._text.sceneBoundingRect().contains(event.scenePos()):
+                    sc.clearSelection()
+                    sc.setFocusItem(self._text, Qt.FocusReason.MouseFocusReason)
+                    self._text.setFocus(Qt.FocusReason.MouseFocusReason)
+                    for view in sc.views():
+                        view.setFocus(Qt.FocusReason.MouseFocusReason)
+                    event.accept()
+                    return
+        super().mousePressEvent(event)
+
 
 class LinkedCommentTool(BaseTool):
     name = "linked_comment"
@@ -258,14 +274,16 @@ class LinkedCommentTool(BaseTool):
                 sc = text_item.scene()
                 if sc is None:
                     return
-                # Forza il focus item nella scena (vedi callout_tool per il
-                # rationale: il group catturerebbe il focus altrimenti).
-                sc.setFocusItem(text_item, Qt.FocusReason.MouseFocusReason)
-                text_item.setFocus(Qt.FocusReason.MouseFocusReason)
+                # Vedi callout_tool per il rationale dei 4 passi.
+                sc.clearSelection()
+                for view in sc.views():
+                    view.setFocus(Qt.FocusReason.OtherFocusReason)
+                sc.setFocusItem(text_item, Qt.FocusReason.OtherFocusReason)
+                text_item.setFocus(Qt.FocusReason.OtherFocusReason)
                 cursor = text_item.textCursor()
                 cursor.select(cursor.SelectionType.Document)
                 text_item.setTextCursor(cursor)
-            QTimer.singleShot(0, _grab)
+            QTimer.singleShot(50, _grab)
         self._item = None
         self._anchor = None
         return item
