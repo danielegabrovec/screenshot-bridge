@@ -20,11 +20,17 @@ from PyQt6.QtGui import (
     QPixmap,
 )
 from PyQt6.QtWidgets import (
+    QColorDialog,
+    QGraphicsEllipseItem,
     QGraphicsItem,
+    QGraphicsItemGroup,
+    QGraphicsLineItem,
+    QGraphicsPathItem,
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
+    QGraphicsTextItem,
     QGraphicsView,
     QInputDialog,
     QLabel,
@@ -543,10 +549,51 @@ class CanvasEditor(QGraphicsView):
         back_action.triggered.connect(lambda: self._send_to_back(item))
         menu.addAction(back_action)
         menu.addSeparator()
+        # === Proprietà visive (colore/spessore/opacità) ===
+        color_action = QAction("🎨 Cambia colore…", self)
+        color_action.triggered.connect(lambda: self._change_item_color(item))
+        menu.addAction(color_action)
+        thickness_action = QAction("📏 Cambia spessore…", self)
+        thickness_action.triggered.connect(lambda: self._change_item_thickness(item))
+        menu.addAction(thickness_action)
+        opacity_action = QAction("🌫 Opacità…", self)
+        opacity_action.triggered.connect(lambda: self._change_item_opacity(item))
+        menu.addAction(opacity_action)
+        menu.addSeparator()
         del_action = QAction("Elimina", self)
         del_action.triggered.connect(lambda: self._remove_item(item))
         menu.addAction(del_action)
         menu.exec(event.globalPos())
+
+    # ---- Item color/thickness/opacity --------------------------------------
+
+    def _change_item_color(self, item: QGraphicsItem) -> None:
+        current = _read_item_color(item) or QColor("red")
+        color = QColorDialog.getColor(current, self, "Scegli colore elemento")
+        if color.isValid():
+            _apply_item_color(item, color)
+            self._handles.refresh()
+
+    def _change_item_thickness(self, item: QGraphicsItem) -> None:
+        current = _read_item_thickness(item) or 4
+        value, ok = QInputDialog.getInt(
+            self, "Cambia spessore",
+            "Spessore del tratto/bordo in pixel:",
+            current, 1, 50, 1,
+        )
+        if ok:
+            _apply_item_thickness(item, int(value))
+            self._handles.refresh()
+
+    def _change_item_opacity(self, item: QGraphicsItem) -> None:
+        current_pct = int(round(item.opacity() * 100))
+        value, ok = QInputDialog.getInt(
+            self, "Opacità elemento",
+            "Opacità in % (100 = pieno, 0 = invisibile):",
+            current_pct, 5, 100, 5,
+        )
+        if ok:
+            item.setOpacity(max(0.05, value / 100.0))
 
     @staticmethod
     def _resolve_table_root(item: QGraphicsItem) -> Optional[QGraphicsItem]:
@@ -844,6 +891,129 @@ class _DescriptionCallout(QGraphicsSimpleTextItem):
         painter.drawRoundedRect(bg_rect, 4, 4)
         painter.restore()
         super().paint(painter, option, widget)
+
+
+# ---------------------------------------------------------------------------
+# Helpers: leggi/applica colore e spessore in modo polimorfico per i vari
+# tipi di item che la nostra app produce (shape, text, stencil group, arrow…)
+# ---------------------------------------------------------------------------
+
+
+def _read_item_color(item: QGraphicsItem) -> Optional[QColor]:
+    """Best-effort: ritorna il colore "principale" dell'item.
+
+    Per shape filled (rect/ellipse) preferisce il colore del bordo (pen).
+    Per testi ritorna il colore del testo. Per group ricorre sul primo
+    figlio che ha un colore leggibile.
+    """
+    from .tools.arrow_tool import ArrowItem  # lazy per evitare cicli
+    if isinstance(item, ArrowItem):
+        return item.pen().color()
+    if isinstance(item, QGraphicsLineItem):
+        return item.pen().color()
+    if isinstance(item, (QGraphicsRectItem, QGraphicsEllipseItem,
+                          QGraphicsPathItem)):
+        pen_col = item.pen().color()
+        if pen_col.alpha() > 0 and item.pen().width() > 0:
+            return pen_col
+        # fallback al brush solo se non c'è bordo visibile
+        brush = item.brush()
+        if brush.style() != Qt.BrushStyle.NoBrush:
+            return brush.color()
+        return pen_col
+    if isinstance(item, QGraphicsTextItem):
+        return item.defaultTextColor()
+    if isinstance(item, QGraphicsSimpleTextItem):
+        return item.brush().color()
+    if isinstance(item, QGraphicsItemGroup):
+        for child in item.childItems():
+            c = _read_item_color(child)
+            if c is not None:
+                return c
+    return None
+
+
+def _apply_item_color(item: QGraphicsItem, color: QColor) -> None:
+    """Applica il colore "principale" a un item, ricorsivamente sui group."""
+    from .tools.arrow_tool import ArrowItem
+    from .tools.line_tool import CurveItem
+    if isinstance(item, (ArrowItem, CurveItem)):
+        pen = item.pen()
+        pen.setColor(color)
+        item.setPen(pen)
+        # ArrowItem ha la punta riempita: aggiorna anche il brush
+        if isinstance(item, ArrowItem):
+            from PyQt6.QtGui import QBrush
+            item.setBrush(QBrush(color))
+        return
+    if isinstance(item, QGraphicsLineItem):
+        pen = item.pen()
+        pen.setColor(color)
+        item.setPen(pen)
+        return
+    if isinstance(item, (QGraphicsRectItem, QGraphicsEllipseItem,
+                          QGraphicsPathItem)):
+        pen = item.pen()
+        pen.setColor(color)
+        item.setPen(pen)
+        # Se l'item è "filled" (brush solido, non trasparente) propaghiamo
+        # mantenendo l'alpha originale per highlight semi-trasparenti.
+        from PyQt6.QtGui import QBrush
+        brush = item.brush()
+        if brush.style() != Qt.BrushStyle.NoBrush:
+            old_alpha = brush.color().alpha()
+            new = QColor(color)
+            if old_alpha < 255:
+                new.setAlpha(old_alpha)
+            item.setBrush(QBrush(new))
+        return
+    if isinstance(item, QGraphicsTextItem):
+        item.setDefaultTextColor(color)
+        return
+    if isinstance(item, QGraphicsSimpleTextItem):
+        from PyQt6.QtGui import QBrush
+        item.setBrush(QBrush(color))
+        return
+    if isinstance(item, QGraphicsItemGroup):
+        for child in item.childItems():
+            _apply_item_color(child, color)
+        return
+
+
+def _read_item_thickness(item: QGraphicsItem) -> Optional[int]:
+    from .tools.arrow_tool import ArrowItem
+    if isinstance(item, ArrowItem):
+        return item.thickness()
+    if isinstance(item, (QGraphicsRectItem, QGraphicsEllipseItem,
+                          QGraphicsPathItem, QGraphicsLineItem)):
+        return max(1, int(item.pen().widthF()))
+    if isinstance(item, QGraphicsItemGroup):
+        for child in item.childItems():
+            t = _read_item_thickness(child)
+            if t is not None:
+                return t
+    return None
+
+
+def _apply_item_thickness(item: QGraphicsItem, thickness: int) -> None:
+    from .tools.arrow_tool import ArrowItem
+    if isinstance(item, ArrowItem):
+        item.set_thickness(thickness)
+        # set_thickness ricostruisce la path ma NON aggiorna il pen
+        pen = item.pen()
+        pen.setWidth(thickness)
+        item.setPen(pen)
+        return
+    if isinstance(item, (QGraphicsRectItem, QGraphicsEllipseItem,
+                          QGraphicsPathItem, QGraphicsLineItem)):
+        pen = item.pen()
+        pen.setWidth(thickness)
+        item.setPen(pen)
+        return
+    if isinstance(item, QGraphicsItemGroup):
+        for child in item.childItems():
+            _apply_item_thickness(child, thickness)
+        return
 
 
 def _shallow_clone(item: QGraphicsItem) -> Optional[QGraphicsItem]:
