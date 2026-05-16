@@ -101,6 +101,16 @@ class LinkedCommentItem(QGraphicsItemGroup):
         self._text.setTextWidth(max(60, local_rect.width() - 20))
         self.addToGroup(self._text)
 
+        # Quando il testo cambia, ridimensioniamo il body in altezza per
+        # contenerlo. La larghezza resta fissa (così Qt fa word-wrap),
+        # cresce solo in basso. Connessione "compressa" via QTimer per non
+        # ricalcolare ad ogni carattere.
+        self._resize_timer = QTimer()
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(40)
+        self._resize_timer.timeout.connect(self._auto_resize_to_text)
+        self._text.document().contentsChanged.connect(self._resize_timer.start)
+
         # Abilita le notifiche di movimento SOLO ora che tutti gli attributi
         # sono inizializzati, così _update_link può girare in itemChange.
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
@@ -119,6 +129,32 @@ class LinkedCommentItem(QGraphicsItemGroup):
         self._body.setPath(new_path)
         self._text.setTextWidth(max(60, local.width() - 20))
         self._update_link()
+
+    def local_rect(self) -> QRectF:
+        return QRectF(self._local_rect)
+
+    def anchor_scene(self) -> QPointF:
+        return QPointF(self._anchor_scene)
+
+    def set_anchor_scene(self, p: QPointF) -> None:
+        self._anchor_scene = QPointF(p)
+        self._update_link()
+
+    def _auto_resize_to_text(self) -> None:
+        """Cresce in altezza per contenere il testo (la larghezza è fissa)."""
+        # textRect altezza = dimensione naturale del documento
+        doc_h = self._text.document().size().height()
+        needed_h = doc_h + 14  # padding top+bottom
+        new_h = max(self._local_rect.height(), needed_h)
+        if abs(new_h - self._local_rect.height()) < 0.5:
+            return
+        new_local = QRectF(0, 0, self._local_rect.width(), new_h)
+        self._local_rect = new_local
+        path = QPainterPath()
+        path.addRoundedRect(new_local, 8, 8)
+        self._body.setPath(path)
+        self._update_link()
+        self.prepareGeometryChange()
 
     def text_item(self) -> QGraphicsTextItem:
         return self._text

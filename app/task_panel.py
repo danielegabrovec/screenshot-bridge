@@ -47,6 +47,13 @@ class _TaskList(QListWidget):
         # Solo doubleClick attiva l'anteprima — clic singolo gestisce la
         # selezione (multipla) senza caricare l'immagine ad ogni click.
         self.itemDoubleClicked.connect(self._on_activate)
+        # Tieni sincronizzati selezione Qt nativa <-> stato checkbox.
+        # `itemChanged` scatta quando l'utente clicca la checkbox; quando
+        # cambia la selezione (Ctrl/Shift+click sul testo) aggiorniamo i
+        # check_state per riflettere lo stato.
+        self.itemChanged.connect(self._on_item_checked)
+        self.itemSelectionChanged.connect(self._sync_check_state_from_selection)
+        self._syncing = False  # flag anti-ricorsione fra i due signal
 
     def populate(self, tasks: list[Task]) -> None:
         self.clear()
@@ -61,6 +68,10 @@ class _TaskList(QListWidget):
             item.setData(ROLE_TASK_PATH, str(task.png_path))
             item.setData(ROLE_TASK_STATUS, task.status)
             item.setToolTip(str(task.png_path))
+            # Checkbox visibile per selezione multipla. Lo stato è
+            # sincronizzato con selectedItems() in _sync_check_state.
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
             self.addItem(item)
 
     def _task_for_item(self, item: QListWidgetItem) -> Optional[Task]:
@@ -80,12 +91,52 @@ class _TaskList(QListWidget):
             self.task_activated.emit(task)
 
     def selected_tasks(self) -> list[Task]:
+        # Consideriamo "selezionato" un item se è in selectedItems() OPPURE
+        # se la sua checkbox è spuntata (modi alternativi che l'utente può
+        # mescolare).
         out: list[Task] = []
+        seen: set[str] = set()
         for item in self.selectedItems():
             t = self._task_for_item(item)
-            if t is not None:
+            if t is not None and str(t.png_path) not in seen:
                 out.append(t)
+                seen.add(str(t.png_path))
+        for i in range(self.count()):
+            item = self.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                t = self._task_for_item(item)
+                if t is not None and str(t.png_path) not in seen:
+                    out.append(t)
+                    seen.add(str(t.png_path))
         return out
+
+    def _on_item_checked(self, item: QListWidgetItem) -> None:
+        """Click sulla checkbox → selezione Qt nativa coerente."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            item.setSelected(item.checkState() == Qt.CheckState.Checked)
+        finally:
+            self._syncing = False
+
+    def _sync_check_state_from_selection(self) -> None:
+        """Ctrl/Shift+click sul testo → checkbox aggiornata."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            for i in range(self.count()):
+                item = self.item(i)
+                target = (
+                    Qt.CheckState.Checked
+                    if item.isSelected()
+                    else Qt.CheckState.Unchecked
+                )
+                if item.checkState() != target:
+                    item.setCheckState(target)
+        finally:
+            self._syncing = False
 
     def _on_context_menu(self, pos) -> None:
         item = self.itemAt(pos)

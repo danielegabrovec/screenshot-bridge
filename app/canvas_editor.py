@@ -284,7 +284,28 @@ class CanvasEditor(QGraphicsView):
     # ---- Export ------------------------------------------------------------
 
     def export_png_bytes(self) -> bytes:
-        rect = self._scene.sceneRect().toRect()
+        # sceneRect è bloccato sul background, ma le annotazioni (callout,
+        # commenti collegati, descrizioni a destra) possono uscirne. Per
+        # garantire che TUTTI gli item utente finiscano nel PNG calcoliamo
+        # un bounding di export che include il background + tutti gli item
+        # NON marcati come "flash" (esclusi handle/cornici/flash highlight).
+        scene_rect = self._scene.sceneRect()
+        export_rect = QRectF(scene_rect)
+        if self._background is not None:
+            bg_rect = self._background.sceneBoundingRect()
+            export_rect = QRectF(bg_rect)
+        for it in self._scene.items():
+            if it in self._flash_items:
+                continue
+            export_rect = export_rect.united(it.sceneBoundingRect())
+        # Margine di rispetto per non tagliare bordi/ombre
+        export_rect = export_rect.adjusted(-4, -4, 4, 4)
+
+        rect = export_rect.toRect()
+        if rect.width() <= 0 or rect.height() <= 0:
+            rect = self._scene.sceneRect().toRect()
+            export_rect = QRectF(rect)
+
         image = QImage(rect.size(), QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.transparent)
         painter = QPainter(image)
@@ -296,9 +317,6 @@ class CanvasEditor(QGraphicsView):
         previously_selected = list(self._scene.selectedItems())
         self._scene.clearSelection()
 
-        # Hide transient flash highlights AND edit handles during export so
-        # they don't end up baked into the saved PNG. `_flash_items` ora
-        # contiene anche handles/cornice di selezione (registrati dal manager).
         hidden = [h for h in self._flash_items if h.isVisible()]
         for h in hidden:
             h.setVisible(False)
@@ -306,7 +324,7 @@ class CanvasEditor(QGraphicsView):
             self._scene.render(
                 painter,
                 target=QRectF(image.rect()),
-                source=self._scene.sceneRect(),
+                source=export_rect,
             )
         finally:
             for h in hidden:
@@ -531,6 +549,16 @@ class CanvasEditor(QGraphicsView):
         cursor: Optional[QGraphicsItem] = item
         while cursor is not None:
             if getattr(cursor, "IS_TABLE", False):
+                return cursor
+            cursor = cursor.parentItem()
+        return None
+
+    @staticmethod
+    def _resolve_linked_comment_root(item: QGraphicsItem) -> Optional[QGraphicsItem]:
+        """Risale finché trova un LinkedCommentItem (IS_LINKED_COMMENT)."""
+        cursor: Optional[QGraphicsItem] = item
+        while cursor is not None:
+            if getattr(cursor, "IS_LINKED_COMMENT", False):
                 return cursor
             cursor = cursor.parentItem()
         return None
