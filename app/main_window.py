@@ -789,16 +789,58 @@ class MainWindow(QMainWindow):
         task = self._resolve_handoff_task()
         if task is None:
             return
-        QGuiApplication.clipboard().setText(str(task.png_path))
-        self.statusBar().showMessage("Path copiato negli appunti", 3000)
+        text = str(task.png_path)
+        QGuiApplication.clipboard().setText(text)
+        self._flash_copy_btn(self._copy_path_btn, "Copia path")
+        self._toast_copied(text)
 
     def _copy_last_for_claude(self) -> None:
         task = self._resolve_handoff_task()
         if task is None:
             return
         template = self.settings.handoff_template()
-        QGuiApplication.clipboard().setText(storage.claude_handoff_text(task, template))
-        self.statusBar().showMessage("Testo per Claude copiato negli appunti", 3000)
+        try:
+            text = storage.claude_handoff_text(task, template)
+        except (KeyError, ValueError, IndexError) as exc:
+            # Template malformato (placeholder sconosciuto, graffa orfana).
+            QMessageBox.warning(
+                self, "Template non valido",
+                f"Il template handoff contiene un errore:\n  {exc}\n\n"
+                "Vai in Impostazioni › Template handoff Claude per correggerlo.\n"
+                "Placeholder validi: {png}, {description}, {md}",
+            )
+            return
+        QGuiApplication.clipboard().setText(text)
+        self._flash_copy_btn(self._copy_claude_btn, "Copia per Claude")
+        self._toast_copied(text)
+
+    def _toast_copied(self, text: str) -> None:
+        """Status bar message col preview di cosa è stato copiato."""
+        preview = text if len(text) <= 80 else text[:77] + "…"
+        self.statusBar().showMessage(f"✓ Copiato negli appunti: {preview}", 5000)
+
+    def _flash_copy_btn(self, btn: QPushButton, original_label: str) -> None:
+        """Feedback visivo: il bottone diventa 'Copiato!' verde per 1.5s."""
+        btn.setText("✓ Copiato!")
+        original_role = btn.property("role")
+        btn.setProperty("role", "success")
+        # success role non esiste nel QSS → forziamo inline come fallback
+        theme = ThemeManager.instance().current_theme()
+        btn.setStyleSheet(
+            f"QPushButton {{ background:{theme.success}; color:white; "
+            f"border:1px solid {theme.success}; border-radius:6px; "
+            f"padding:5px 12px; font-weight:600; }}"
+        )
+        from PyQt6.QtCore import QTimer
+
+        def restore() -> None:
+            btn.setText(original_label)
+            btn.setStyleSheet("")
+            if original_role is not None:
+                btn.setProperty("role", original_role)
+            repolish(btn)
+
+        QTimer.singleShot(1500, restore)
 
     def _resolve_handoff_task(self) -> Optional[Task]:
         if self._last_saved is not None and self._last_saved.png_path.exists():
