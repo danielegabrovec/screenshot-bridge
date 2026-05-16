@@ -489,8 +489,15 @@ class CanvasEditor(QGraphicsView):
             dlg,
         ))
         edit = QPlainTextEdit(current, dlg)
-        edit.setWordWrapMode(QTextOption.WrapMode.WordWrap)
+        # WrapAtWordBoundaryOrAnywhere: preferisce spezzare sui confini di parola
+        # ma se la "parola" è lunga quanto tutta la riga (es. tante 'r' senza
+        # spazi, o un URL lungo) va a capo comunque — WordWrap "puro" non lo
+        # fa e produce scrollbar orizzontale.
+        edit.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         edit.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        # Disabilita la scrollbar orizzontale: con il wrap-anywhere non serve,
+        # e se compare significa che qualcosa non sta wrappando (bug).
+        edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         edit.setTabChangesFocus(True)
         layout.addWidget(edit, stretch=1)
         buttons = QDialogButtonBox(
